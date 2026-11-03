@@ -1,0 +1,31 @@
+name: Build UltimateGUI
+on:
+  push:
+    paths: ['ultimate-gui/**', '.github/workflows/ultimate-gui.yml']
+  pull_request:
+    paths: ['ultimate-gui/**', '.github/workflows/ultimate-gui.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-gui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package
+      - name: Verify UUID access and privacy rules
+        run: java -cp target/classes:target/test-classes shop.blinksmp.gui.GuiRulesTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateGUI-1.0.0
+          path: ultimate-gui/target/UltimateGUI-1.0.0.jar
+          if-no-files-found: error
