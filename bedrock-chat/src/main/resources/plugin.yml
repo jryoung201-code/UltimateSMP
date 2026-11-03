@@ -1,0 +1,16 @@
+name: UltimateBedrockChat
+version: 1.0.0
+main: shop.blinksmp.chat.UltimateBedrockChat
+api-version: '1.21.11'
+description: Relay authenticated Floodgate chat through Paper while preserving Java's signed chat path.
+author: Aven
+depend: [packetevents, floodgate]
+softdepend: [Geyser-Spigot, UltimateRanks]
+commands:
+  bedrockchat:
+    description: Show Bedrock chat relay status
+    permission: ultimatebedrockchat.admin
+    usage: /<command>
+permissions:
+  ultimatebedrockchat.admin:
+    default: op
