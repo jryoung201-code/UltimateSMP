@@ -1,5 +1,5 @@
 name: UltimateTrades
-version: 1.0.0
+version: 1.0.1
 main: shop.blinksmp.trades.UltimateTrades
 api-version: '1.21.11'
 author: Aven

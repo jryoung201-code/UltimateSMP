@@ -1,4 +1,6 @@
 # Paper 1.21.11 / Java 21. Works with Geyser's standard chest inventory interface.
+# Allow Creative players to trade (Spectator remains blocked).
+allow-creative-trading: true
 request-timeout-seconds: 30
 request-cooldown-seconds: 5
 trade-timeout-seconds: 180

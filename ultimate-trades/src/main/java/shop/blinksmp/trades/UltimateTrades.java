@@ -35,8 +35,10 @@ public final class UltimateTrades extends JavaPlugin implements Listener,TabComp
     private BukkitTask heartbeat;
     private int requestSeconds,tradeSeconds,confirmSeconds,cooldownSeconds;
     private double distanceSquared;
+    private boolean allowCreative;
     @Override public void onEnable() {
         saveDefaultConfig();
+        allowCreative=getConfig().getBoolean("allow-creative-trading",true);
         requestSeconds=limit("request-timeout-seconds",30,5,120);tradeSeconds=limit("trade-timeout-seconds",180,30,600);
         confirmSeconds=limit("confirmation-seconds",3,3,10);cooldownSeconds=limit("request-cooldown-seconds",5,1,60);
         double distance=getConfig().getDouble("max-distance",16);
@@ -52,7 +54,32 @@ public final class UltimateTrades extends JavaPlugin implements Listener,TabComp
         return a.isOnline() && b.isOnline() && !a.isDead() && !b.isDead() && a.getWorld().equals(b.getWorld()) && a.getLocation().distanceSquared(b.getLocation())<=distanceSquared && a.canSee(b) && b.canSee(a);
     }
     private boolean usable(Player p) {
-        return p.hasPermission("ultimatetrades.use") && p.getGameMode()!=GameMode.CREATIVE && p.getGameMode()!=GameMode.SPECTATOR && !p.isDead();
+        return TradeAccess.check(p.hasPermission("ultimatetrades.use"),p.isDead(),p.getGameMode(),allowCreative,false,false)==TradeAccess.Issue.NONE;
+    }
+    private String unavailable(Player subject,boolean self) {
+        UUID id=subject.getUniqueId();Session previous=active.get(id);
+        // Clean up a closed/unusable menu before reporting that a player is busy.
+        if(previous!=null && !valid(previous)) {
+            if(previous.state.closed()) { unlink(previous);closeViews(previous,"Stale trade cleared."); }
+            else cancel(previous,"Previous trade cancelled because its menu or player was unavailable.");
+        }
+        TradeAccess.Issue issue=TradeAccess.check(subject.hasPermission("ultimatetrades.use"),subject.isDead(),subject.getGameMode(),allowCreative,disabled.contains(id),active.containsKey(id));
+        String who=self?"You":subject.getName();
+        return switch(issue) {
+            case NONE -> null;
+            case NO_PERMISSION -> who+(self?" do":" does")+" not have trading permission (ultimatetrades.use).";
+            case DEAD -> who+" must respawn before trading.";
+            case SPECTATOR -> who+(self?" are":" is")+" in Spectator mode. Switch game mode to trade.";
+            case CREATIVE_BLOCKED -> "Creative trading is disabled in this server's config. Switch to Survival or enable allow-creative-trading.";
+            case REQUESTS_OFF -> self?"Your trade requests are disabled. Use /trade toggle to enable them.":subject.getName()+" has trade requests disabled. Ask them to use /trade toggle.";
+            case BUSY -> who+(self?" are":" is")+" already in a trade. "+(self?"Use /trade cancel first.":"Wait for that trade to finish.");
+        };
+    }
+    private boolean blocked(Player requester,Player other) {
+        String reason=unavailable(requester,true);
+        if(reason==null) reason=unavailable(other,false);
+        if(reason==null) return false;
+        say(requester,reason);return true;
     }
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args) {
         if(!(sender instanceof Player p)) { say(sender,"Use trading in-game.");return true; }
@@ -77,16 +104,17 @@ public final class UltimateTrades extends JavaPlugin implements Listener,TabComp
             if(incoming.size()>1) { say(p,"Use /trade "+action+" <player> to choose a request.");return true; }
             Request request=incoming.get(0);requests.remove(request.from());Player other=Bukkit.getPlayer(request.from());
             if(action.equals("deny")) { say(p,"Request declined.");if(other!=null) say(other,p.getName()+" declined your request.");return true; }
-            if(other==null || active.containsKey(id) || active.containsKey(other.getUniqueId()) || !near(p,other) || !usable(p) || !usable(other) || disabled.contains(id) || disabled.contains(other.getUniqueId())) {
-                say(p,"Cannot trade: both players must be available, nearby and in survival/adventure mode.");return true;
-            }
+            if(other==null) { say(p,"That player is no longer online.");return true; }
+            if(blocked(p,other)) return true;
+            if(!near(p,other)) { say(p,"Both players must be visible, in the same world and within "+(int)Math.sqrt(distanceSquared)+" blocks.");return true; }
             if(!InventoryPlan.empty(p.getItemOnCursor()) || !InventoryPlan.empty(other.getItemOnCursor())) { say(p,"Both players must put away the item held by their cursor first.");return true; }
             open(other,p);return true;
         }
         if(args.length!=1) { help(p);return true; }
         Player target=Bukkit.getPlayerExact(args[0]);
-        if(target==null || target.equals(p) || !near(p,target)) { say(p,"Choose an online, visible player nearby in your world.");return true; }
-        if(!usable(p) || !usable(target) || active.containsKey(id) || active.containsKey(target.getUniqueId()) || disabled.contains(id) || disabled.contains(target.getUniqueId())) { say(p,"One of you is busy, has requests disabled, or cannot trade in this game mode.");return true; }
+        if(target==null || target.equals(p) || !p.canSee(target) || !target.canSee(p)) { say(p,"Choose another online, visible player.");return true; }
+        if(blocked(p,target)) return true;
+        if(!near(p,target)) { say(p,"Both players must be in the same world and within "+(int)Math.sqrt(distanceSquared)+" blocks.");return true; }
         long now=System.nanoTime();Long last=cooldowns.get(id);
         if(last!=null && now-last<cooldownSeconds*1_000_000_000L) { say(p,"Please wait before sending another trade request.");return true; }
         long pending=requests.values().stream().filter(r->r.to().equals(target.getUniqueId()) && now-r.expires()<0).count();

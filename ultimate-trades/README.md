@@ -1,4 +1,4 @@
-# UltimateTrades 1.0.0
+# UltimateTrades 1.0.1
 
 Player-to-player item trades for Paper 1.21.11 / Java 21. No required plugins.
 Works with Java players and Geyser/Floodgate Bedrock players using the standard
@@ -6,7 +6,7 @@ chest GUI; no custom resource pack required. Money trading is not included.
 
 ## Install
 
-Stop the server, put UltimateTrades-1.0.0.jar in plugins/, then start it.
+Stop the server, put UltimateTrades-1.0.1.jar in plugins/, then start it.
 Configuration is generated at plugins/UltimateTrades/config.yml. Restart after
 config changes. `ultimatetrades.use` is granted to all players by default.
 
@@ -21,9 +21,19 @@ config changes. `ultimatetrades.use` is granted to all players by default.
 - `/trade help` shows commands. `/trading` is an alias.
 
 Requests expire after 30 seconds with a 5-second sending cooldown. Both players
-must remain in survival/adventure, in the same world, within 16 blocks, and visible
-to each other. Creative/spectator mode, teleport, death, disconnect, closing the
+must remain in the same world, within 16 blocks, and visible to each other.
+Creative trading is allowed by default; set `allow-creative-trading: false` to
+restrict it to Survival/Adventure. Missing settings in existing configs default
+to true, so no config deletion is needed. Spectator mode is always blocked.
+Teleport, death, disconnect, closing the
 menu, plugin shutdown or a 180-second trade timeout cancels the trade.
+
+## Troubleshooting
+
+Request errors identify the specific player and reason: disabled requests, an
+active trade, missing permission, Spectator mode or Creative blocked by config.
+Use `/trade toggle` to enable your requests, or `/trade cancel` to end your current
+trade. Closed/unusable sessions are cleared before deciding a player is busy.
 
 ## Trading
 

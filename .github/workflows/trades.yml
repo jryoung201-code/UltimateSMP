@@ -24,10 +24,11 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
       - name: Verify confirmations and inventories
         run: |
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.trades.TradeAccessTest
           java -cp target/classes:target/test-classes shop.blinksmp.trades.TradeStateTest
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.trades.InventoryPlanTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateTrades-1.0.0
-          path: ultimate-trades/target/UltimateTrades-1.0.0.jar
+          name: UltimateTrades-1.0.1
+          path: ultimate-trades/target/UltimateTrades-1.0.1.jar
           if-no-files-found: error
