@@ -1,0 +1,33 @@
+name: Build UltimateSettings
+on:
+  push:
+    paths: ['ultimate-settings/**', '.github/workflows/settings.yml']
+  pull_request:
+    paths: ['ultimate-settings/**', '.github/workflows/settings.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-settings
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+      - name: Verify settings
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.settings.PreferencesTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.settings.PreferenceStoreTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateSettings-1.0.0
+          path: ultimate-settings/target/UltimateSettings-1.0.0.jar
+          if-no-files-found: error

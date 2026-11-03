@@ -12,6 +12,7 @@ import org.bukkit.event.block.*;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.*;
+import org.bukkit.event.server.*;
 import org.bukkit.inventory.*;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -30,6 +31,10 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private final Map<UUID,Integer> frozen=new HashMap<>();
     private final Map<UUID,Inventory> inspections=new HashMap<>();
     private volatile Map<Rank,Component> prefixes=Map.of();
+    private volatile java.util.function.Predicate<UUID> showTags=id->true;
+    private boolean settingsTab;
+    private org.bukkit.plugin.Plugin settings;
+    private java.lang.reflect.Method settingsRefresh;
     private static final LegacyComponentSerializer LEGACY=LegacyComponentSerializer.legacyAmpersand();
     private static final Set<String> MUTED_COMMANDS=Set.of("me","say","msg","tell","w","whisper","r","reply","pm","message","emsg","etell","ew","eme");
 
@@ -43,6 +48,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         Map<Rank,Component> colors=new EnumMap<>(Rank.class);
         for(Rank r:Rank.values()) colors.put(r,LEGACY.deserialize(getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r")));
         prefixes=Map.copyOf(colors);
+        bindSettings();
         Bukkit.getPluginManager().registerEvents(this,this);
         for(String cmd:getDescription().getCommands().keySet()) Objects.requireNonNull(getCommand(cmd)).setTabCompleter(this);
         for(Player p:Bukkit.getOnlinePlayers()) { remember(p); refresh(p); }
@@ -62,6 +68,36 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
 
     private Rank rank(UUID id) { return store.get(id).rank(); }
+    public String getRankName(UUID id) { return rank(id).name(); }
+    public String getRankPrefix(UUID id) {
+        Rank r=rank(id);
+        return getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r");
+    }
+    private void bindSettings() {
+        settings=Bukkit.getPluginManager().getPlugin("UltimateSettings"); settingsRefresh=null;
+        showTags=id->true; settingsTab=false;
+        if(settings==null || !settings.isEnabled()) { settings=null; return; }
+        try {
+            var plugin=settings;
+            var method=plugin.getClass().getMethod("showRankTags",UUID.class);
+            settingsTab=(Boolean)plugin.getClass().getMethod("managesRankTab").invoke(plugin);
+            settingsRefresh=plugin.getClass().getMethod("refreshRankDisplays");
+            showTags=id->{ try { return (Boolean)method.invoke(plugin,id); } catch(ReflectiveOperationException ex) { return true; } };
+        } catch(ReflectiveOperationException ex) {
+            settings=null; settingsTab=false; getLogger().warning("Could not connect personal rank display settings: "+ex);
+        }
+    }
+    @EventHandler public void settingsEnabled(PluginEnableEvent event) {
+        if(event.getPlugin().getName().equals("UltimateSettings")) {
+            bindSettings(); for(Player p:Bukkit.getOnlinePlayers()) refresh(p);
+        }
+    }
+    @EventHandler public void settingsDisabled(PluginDisableEvent event) {
+        if(event.getPlugin()==settings) {
+            settings=null; settingsRefresh=null; settingsTab=false; showTags=id->true;
+            for(Player p:Bukkit.getOnlinePlayers()) refresh(p);
+        }
+    }
     private Rank rank(CommandSender sender) { return sender instanceof Player p ? rank(p.getUniqueId()) : Rank.OWNER; }
     private boolean console(CommandSender s) { return s instanceof ConsoleCommandSender || s instanceof RemoteConsoleCommandSender; }
     private void require(boolean condition,String error) { if(!condition) throw new IllegalArgumentException(error); }
@@ -91,14 +127,16 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),r==v);
         for(String perm:getConfig().getStringList("extra-permissions."+r.name())) a.setPermission(perm,true);
         if(!oldTabs.containsKey(id)) oldTabs.put(id,p.playerListName());
-        Component tab=prefixes.get(r).append(Component.text(p.getName()));
-        p.playerListName(tab); appliedTabs.put(id,tab);
+        Component tab=settingsTab?null:prefixes.get(r).append(Component.text(p.getName()));
+        p.playerListName(tab); appliedTabs.put(id,p.playerListName());
         if(vanished.contains(id) && !Rules.allowed(r,"vanish")) setVanish(p,false);
         if(spectatorModes.containsKey(id) && !Rules.allowed(r,"gsp")) {
             GameMode prior=spectatorModes.remove(id); if(p.getGameMode()==GameMode.SPECTATOR) p.setGameMode(prior);
         }
         for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer);
         p.updateCommands();
+        if(settings!=null && settingsRefresh!=null) try { settingsRefresh.invoke(settings); }
+        catch(ReflectiveOperationException ex) { getLogger().warning("Rank display refresh failed: "+ex); }
     }
     private void updateVisibility(Player viewer) {
         for(UUID id:vanished) {
@@ -303,7 +341,9 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         }
         if(vanished.contains(id)) { event.setCancelled(true); Bukkit.getScheduler().runTask(this,()->say(event.getPlayer(),"Disable vanish to use public chat, or use /sc.")); return; }
         Component prefix=prefixes.get(e.rank());
-        event.renderer((source,displayName,message,viewer)->prefix.append(displayName).append(Component.text(": ")).append(message));
+        event.renderer((source,displayName,message,viewer)->
+                ((viewer instanceof Player recipient && !showTags.test(recipient.getUniqueId()))?Component.empty():prefix)
+                .append(displayName).append(Component.text(": ")).append(message));
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void commands(PlayerCommandPreprocessEvent event) {
         UUID id=event.getPlayer().getUniqueId(); String word=event.getMessage().substring(1).split("\\s+",2)[0].toLowerCase(Locale.ROOT);

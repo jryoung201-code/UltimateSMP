@@ -1,0 +1,15 @@
+name: UltimateSettings
+version: 1.0.0
+main: shop.blinksmp.settings.UltimateSettings
+api-version: '1.21.11'
+description: Personal settings and reduced chunk traffic for UltimateSMP players.
+author: Aven
+commands:
+  settings:
+    description: Open your personal server settings
+    aliases: [preferences, prefs]
+    permission: ultimatesettings.use
+    usage: /<command> [toggle <setting>|reset]
+permissions:
+  ultimatesettings.use:
+    default: true

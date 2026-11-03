@@ -1,5 +1,6 @@
 name: UltimateRanks
-version: 1.0.0
+version: 1.0.1
+softdepend: [UltimateSettings]
 main: shop.blinksmp.ranks.UltimateRanks
 api-version: '1.21.11'
 description: UUID ranks, prefixes and staff tools for UltimateSMP.

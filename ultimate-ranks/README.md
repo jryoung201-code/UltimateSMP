@@ -1,13 +1,13 @@
-# UltimateRanks 1.0.0
+# UltimateRanks 1.0.1
 
 Standalone Paper 1.21.11 / Java 21 plugin for UltimateSMP. No LuckPerms or client
 mod required. Java and Floodgate Bedrock players use the same rank system.
-Prefixes appear in public chat and the tab list. Above-head nameplates are not
-modified. PLAYER UUIDs identify ranks and punishments; MEMBER is the default.
+Prefixes appear in public chat and the tab list. Without UltimateSettings,
+above-head nameplates are not modified. PLAYER UUIDs identify ranks and punishments; MEMBER is the default.
 
 ## Install and first OWNER
 
-1. Stop the server. Upload UltimateRanks-1.0.0.jar into plugins/ and start it.
+1. Stop the server. Upload UltimateRanks-1.0.1.jar into plugins/ and start it.
 2. Join the server once so your exact name and UUID are recorded.
 3. In the SERVER CONSOLE run `rank set YourExactName OWNER` (without `/`).
 4. In game run `/rank info` and `/staff` to check your rank and available tools.
@@ -119,5 +119,14 @@ Run `mvn -f ultimate-ranks/pom.xml package` from the repository with JDK 21.
 The GitHub Actions ranks workflow compiles the plugin, runs authorization and
 duration checks, and tests data persistence, UUID identity, punishment expiry,
 corrupt-data rejection and failed-save behavior. The final JAR is an Actions
-artifact named UltimateRanks-1.0.0. No live Minecraft/Bedrock client test has
+artifact named UltimateRanks-1.0.1. No live Minecraft/Bedrock client test has
 been performed in this build environment.
+
+## Personal rank tags with UltimateSettings
+
+With UltimateSettings installed, chat rank prefixes respect each viewer's
+Show Rank Tags preference. Settings manages per-viewer scoreboard prefixes for
+nametags and the tab list when no custom scoreboard is active. It leaves custom
+scoreboards and existing main-scoreboard teams/objectives alone. Those other
+plugins control their own tab/nametag appearance. Without UltimateSettings, the
+original global chat/tab prefixes continue to work. Rank data is unchanged.

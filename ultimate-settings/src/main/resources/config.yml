@@ -1,0 +1,8 @@
+booster:
+  # Only chunks SENT to this player; no change to simulation distance or farms.
+  # Actual value never exceeds the world's current distance or a lower existing cap.
+  chunk-send-distance: 4
+# Personal scoreboard prefixes provide per-viewer nametags and tab prefixes.
+# Existing custom scoreboards/main-scoreboard teams and objectives are preserved.
+# Set false if another tab/nametag plugin manages all rank presentation.
+manage-rank-scoreboards: true
