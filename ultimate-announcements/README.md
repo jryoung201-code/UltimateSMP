@@ -1,11 +1,11 @@
-# UltimateAnnouncements 1.0.0
+# UltimateAnnouncements 1.0.1
 
 Paper 1.21.11, Java 21. Standalone plugin; no extra dependencies. Chat, titles,
 action bars and boss bars use standard server APIs for Java and Geyser Bedrock players.
 
 ## Install
 
-Stop the server, place UltimateAnnouncements-1.0.0.jar in plugins/, and start.
+Stop the server, place UltimateAnnouncements-1.0.1.jar in plugins/, and start.
 Edit plugins/UltimateAnnouncements/config.yml and use `/announcements reload`.
 Automatic announcements start after five minutes by default and rotate in order.
 No players online means no broadcast and no rotation advance. Scheduled announcements
@@ -38,9 +38,9 @@ Command completion only lists staff options for authorized users.
 
 Shows "Server is restarting in 10...", then 9 through 1, then "Restarting......".
 Chat and title text/colors can be changed in config. At zero the plugin saves every
-world and requests a normal Paper shutdown, which also saves player data.
-**Your hosting panel must automatically start the server again.** The plugin cannot
-launch a stopped server process. This is an operator-started countdown, not a
+world and runs `restart` as the console sender. It does not call `stop` or
+`Bukkit.shutdown()`. Configure your server restart script / hosting panel so
+`/restart` works on your host. This is an operator-started countdown, not a
 recurring automatic restart schedule. Installation never initiates a restart.
 Cancellation and plugin disable clear the countdown; overlapping countdowns are
 rejected. Countdown steps occur no faster than once a second; server lag can delay
@@ -67,7 +67,7 @@ only at startup/reload. There are no external downloads or recurring file reads.
 `mvn -f ultimate-announcements/pom.xml package`
 
 Run `shop.blinksmp.announcements.AnnouncementRulesTest` using compiled main/test
-classes. Checks cover full 10-to-0 ordering, cancellation, duplicate stops,
+classes. Checks cover full 10-to-0 ordering, cancellation, duplicate restart triggers,
 overlapping countdowns, numeric bounds and ordered/random rotation.
 GitHub Actions builds with Java 21 and runs these checks. Live Java/Bedrock UI
 and hosting-panel restart behavior still need verification on the real server.

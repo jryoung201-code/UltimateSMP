@@ -37,5 +37,5 @@ restart:
   countdown-subtitle: "&eServer is restarting"
   final-message: "&c&lRestarting......"
   cancelled-message: "&aServer restart cancelled."
-# At zero this plugin saves worlds and STOPS the server.
-# Configure your hosting panel to automatically start it again.
+# At zero this plugin saves worlds and runs /restart from the console.
+# Configure your server restart script or hosting panel for /restart.

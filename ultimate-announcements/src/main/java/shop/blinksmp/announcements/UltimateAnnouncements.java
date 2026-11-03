@@ -43,7 +43,7 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
         for(String name:List.of("announce","announcements","restartcountdown")) Objects.requireNonNull(getCommand(name)).setTabCompleter(this);
         Bukkit.getPluginManager().registerEvents(this,this);
         heartbeat=Bukkit.getScheduler().runTaskTimer(this,this::pulse,20,20);
-        getLogger().info("UltimateAnnouncements active: "+settings.notices().size()+" messages. Restart countdown saves and stops; your host must start the process again.");
+        getLogger().info("UltimateAnnouncements active: "+settings.notices().size()+" messages. Restart countdown saves worlds and runs /restart from console.");
     }
     private Settings readSettings() throws Exception {
         YamlConfiguration cfg=new YamlConfiguration();cfg.load(new File(getDataFolder(),"config.yml"));
@@ -129,11 +129,19 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
                 if(settings.restartTitle()) player.showTitle(Title.title(text(settings.ending(),player,0),Component.empty()));
             } catch(RuntimeException ex) { getLogger().warning("Could not send final restart notice: "+ex); }
         }
-        getLogger().warning("Restart countdown complete. Saving worlds and stopping; hosting panel must start the server again.");
+        getLogger().warning("Restart countdown complete. Saving worlds and running /restart from console.");
         for(World world:Bukkit.getWorlds()) {
             try { world.save(); } catch(RuntimeException ex) { getLogger().severe("World save failed for "+world.getName()+": "+ex); }
         }
-        Bukkit.shutdown(); // Normal Paper shutdown also saves players and worlds. Never executes a configurable shell command.
+        try {
+            if(!Bukkit.dispatchCommand(Bukkit.getConsoleSender(),"restart")) {
+                getLogger().severe("/restart was not accepted. Check your server restart command configuration.");
+                stopping=false;nextAutomatic=tick+settings.interval();
+            }
+        } catch(RuntimeException ex) {
+            stopping=false;nextAutomatic=tick+settings.interval();
+            getLogger().severe("Could not run /restart: "+ex);
+        }
     }
     private void cancelNotice() {
         for(Player player:Bukkit.getOnlinePlayers()) {
@@ -160,8 +168,8 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
                 if(args.length==1 && args[0].equalsIgnoreCase("status")) { sender.sendMessage(countdown.active()?"Restart in "+countdown.remaining()+" seconds.":"No restart is counting down.");return true; }
                 int seconds=args.length==0?settings.defaultSeconds():Countdown.seconds(args[0]);
                 countdown.start(seconds);clearBars();restartNotice(seconds);nextCountdownNanos=System.nanoTime()+1_000_000_000L;
-                sender.sendMessage("Countdown started: "+seconds+" seconds. At zero the server saves and STOPS; the host must start it again.");
-                getLogger().warning(sender.getName()+" started a "+seconds+"-second save-and-stop countdown.");return true;
+                sender.sendMessage("Countdown started: "+seconds+" seconds. At zero the server saves worlds and runs /restart.");
+                getLogger().warning(sender.getName()+" started a "+seconds+"-second restart countdown.");return true;
             }
             if(command.getName().equals("announce")) {
                 if(args.length==0) throw new IllegalArgumentException("Usage: /announce <message>");
@@ -189,7 +197,7 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
                 }
                 case "status" -> {
                     if(args.length>1) throw new IllegalArgumentException("Usage: /announcements status");
-                    sender.sendMessage("UltimateAnnouncements 1.0.0 | automatic: "+(!settings.enabled()?"disabled":paused?"paused":"enabled")+" | interval: "+settings.interval()+"s | messages: "+settings.notices().size());
+                    sender.sendMessage("UltimateAnnouncements 1.0.1 | automatic: "+(!settings.enabled()?"disabled":paused?"paused":"enabled")+" | interval: "+settings.interval()+"s | messages: "+settings.notices().size());
                     sender.sendMessage(countdown.active()?"Restart in "+countdown.remaining()+" seconds.":"No restart is counting down.");
                 }
                 default -> sender.sendMessage("/announcements <list|send <id>|preview <id>|pause|resume|reload|status>");
