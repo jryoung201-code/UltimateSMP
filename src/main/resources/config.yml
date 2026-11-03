@@ -1,0 +1,22 @@
+# Paper 1.21.11 / Java 21. Works alongside Geyser, Floodgate and ViaVersion.
+# Distances are world-wide, apply equally to Java and Bedrock, and affect farms.
+# A world already configured lower will never be raised above its starting values.
+normal:
+  view-distance: 6
+  simulation-distance: 4
+pressure:
+  view-distance: 4
+  simulation-distance: 3
+  # Used heap / maximum heap, not total process RAM.
+  heap-percent: 80
+  mspt: 45
+  consecutive-samples: 3
+recovery:
+  heap-percent: 65
+  mspt: 35
+  consecutive-samples: 12
+# One sample every 10 seconds; pressure detection has a 60-second startup warmup.
+# At most one chunk step per world every 30 seconds by default.
+change-interval-seconds: 30
+# Put worlds controlled by another distance plugin here.
+excluded-worlds: []

@@ -1,0 +1,16 @@
+name: UltimateOptimize
+version: 1.0.0
+main: shop.blinksmp.ultimateoptimize.UltimateOptimize
+api-version: '1.21.11'
+description: Gradual chunk-distance management for lower memory and tick load.
+author: Aven
+commands:
+  ultimateperf:
+    description: View performance or manage optimization
+    aliases: [uperf]
+    permission: ultimateoptimize.admin
+    usage: /<command> <status|pause|resume|reload>
+permissions:
+  ultimateoptimize.admin:
+    description: Manage UltimateOptimize
+    default: op
