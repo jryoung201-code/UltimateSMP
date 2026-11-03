@@ -4,6 +4,8 @@ import com.github.retrooper.packetevents.PacketEvents;
 import com.github.retrooper.packetevents.event.*;
 import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatMessage;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommand;
+import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommandUnsigned;
 import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -23,6 +25,7 @@ public final class ChatRelay implements Relay, Listener {
     private record Session(Player player,ChatPolicy.Gate gate,AtomicInteger pending) {}
     private final Map<UUID,Session> sessions=new ConcurrentHashMap<>();
     private final LongAdder intercepted=new LongAdder(),dispatched=new LongAdder(),rejected=new LongAdder();
+    private final LongAdder privateDispatched=new LongAdder();
     private PacketListenerAbstract listener;
     private Object floodgateApi;
     private Method isFloodgatePlayer;
@@ -44,26 +47,41 @@ public final class ChatRelay implements Relay, Listener {
         for(Player p:Bukkit.getOnlinePlayers()) register(p);
         listener=new PacketListenerAbstract(PacketListenerPriority.HIGHEST) {
             @Override public void onPacketReceive(PacketReceiveEvent event) {
-                if(!plugin.isEnabled() || event.isCancelled() || event.getPacketType()!=PacketType.Play.Client.CHAT_MESSAGE || event.getUser()==null) return;
+                if(!plugin.isEnabled() || event.isCancelled() || event.getUser()==null) return;
                 UUID id=event.getUser().getUUID();
                 if(id==null) return;
                 Session session=sessions.get(id);
                 if(session==null) return; // All Java players, including name/UUID lookalikes, keep the vanilla path.
-                event.setCancelled(true); // Do not also deliver this unsigned packet to vanilla's signature validator.
+                boolean command;
+                String raw;
+                try {
+                    if(event.getPacketType()==PacketType.Play.Client.CHAT_MESSAGE) {
+                        raw=new WrapperPlayClientChatMessage(event).getMessage(); command=false;
+                    } else if(event.getPacketType()==PacketType.Play.Client.CHAT_COMMAND) {
+                        raw=new WrapperPlayClientChatCommand(event).getCommand(); command=true;
+                    } else if(event.getPacketType()==PacketType.Play.Client.CHAT_COMMAND_UNSIGNED) {
+                        raw=new WrapperPlayClientChatCommandUnsigned(event).getCommand(); command=true;
+                    } else return;
+                } catch(RuntimeException ex) { rejected.increment(); return; }
+                // Never intercept arbitrary commands, nor any command packet from a Java session.
+                if(command && !PrivateMessagePolicy.handles(raw)) return;
+                event.setCancelled(true);
                 intercepted.increment();
-                String message;
-                try { message=ChatPolicy.validate(new WrapperPlayClientChatMessage(event).getMessage()); }
-                catch(RuntimeException ex) { rejected.increment(); return; }
+                String message=command?PrivateMessagePolicy.validate(raw):ChatPolicy.validate(raw);
                 if(message==null || !session.gate().allow(System.nanoTime())) { rejected.increment(); return; }
                 if(session.pending().incrementAndGet()>2) { session.pending().decrementAndGet(); rejected.increment(); return; }
                 try {
                     Bukkit.getScheduler().runTask(plugin,()-> {
                         try {
                             if(!plugin.isEnabled() || sessions.get(id)!=session || !session.player().isOnline()) { rejected.increment(); return; }
-                            // Paper invokes its normal chat processor/events. Mutes, cancellation and renderers still run.
-                            // Validation rejects leading slash, so this can never execute a command.
-                            session.player().chat(message);
-                            dispatched.increment();
+                            if(command) {
+                                if(PrivateMessages.dispatch(session.player(),message)) privateDispatched.increment();
+                                else rejected.increment();
+                            } else {
+                                // Normal chat events/formatters run. Public chat cannot execute commands.
+                                session.player().chat(message);
+                                dispatched.increment();
+                            }
                         } finally { session.pending().decrementAndGet(); }
                     });
                 } catch(org.bukkit.plugin.IllegalPluginAccessException ex) {
@@ -90,8 +108,9 @@ public final class ChatRelay implements Relay, Listener {
         if(listener!=null) PacketEvents.getAPI().getEventManager().unregisterListener(listener);
     }
     @Override public void status(CommandSender sender) {
-        sender.sendMessage("UltimateBedrockChat 1.0.2 | verified Bedrock sessions: "+sessions.size());
+        sender.sendMessage("UltimateBedrockChat 1.0.3 | verified Bedrock sessions: "+sessions.size());
         sender.sendMessage("Intercepted: "+intercepted.sum()+" | passed to Paper chat events: "+dispatched.sum()+" | invalid/rate-limited/stale: "+rejected.sum());
+        sender.sendMessage("Private-message commands dispatched: "+privateDispatched.sum()+" | /msg, /tell, /w supported");
         sender.sendMessage("Java messages are not relayed. Bedrock output is unsigned. Mute/filter events may cancel messages after dispatch.");
     }
 }

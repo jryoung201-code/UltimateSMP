@@ -1,4 +1,4 @@
-# UltimateBedrockChat 1.0.2
+# UltimateBedrockChat 1.0.3
 
 Paper 1.21.11 / Java 21 plugin for chat from Floodgate-authenticated Bedrock players
 while Java's normal signed-chat handling remains active. Requires existing Geyser/Floodgate
@@ -53,6 +53,26 @@ Geyser must run on this same server for this version; separate proxy setups need
 their own configuration and testing. This is a custom relay, not Geyser's standard
 configuration recommendation (which is disabling secure-profile enforcement).
 
+## Bedrock private messages
+
+Verified Bedrock players can use `/msg <player> <message>`, `/tell`, and `/w`,
+including the `minecraft:` aliases, while secure-profile enforcement stays enabled.
+Both signed and unsigned command packet variants are supported. A single literal
+online-player name is required (include Floodgate's dot prefix for Bedrock targets);
+selectors such as `@a` are rejected. Delivery and player-name resolution use the
+server's existing command implementation. No new global `/msg` registration overrides
+Java players or other plugins. Java commands keep their normal packet path.
+
+Private messages are validated/rate-limited with public chat, queued on the main
+thread, and run through PlayerCommandPreprocessEvent before dispatch as the
+original player. UltimateRanks mutes and other command blockers can cancel them;
+normal command permissions still apply. Only supported private-message commands
+can enter this relay. Rewrites to other commands are rejected. Plugin-specific
+private-message events/ignore rules depend on the existing command implementation;
+public chat events do not apply to private messages. Messages remain unsigned.
+API tests verify cancellation, rewrites and sender identity with a simulated server;
+live cross-platform delivery still needs testing on your real server.
+
 ## What it does
 
 - Records Bedrock membership using Floodgate's actual `isFloodgatePlayer(UUID)`
@@ -87,8 +107,8 @@ tasks, and stale tasks cannot carry over to a reconnect under the same UUID.
 Session state is removed on quit/disable. No player data, recurring scans, disk
 writes per message or external network calls are needed by this relay.
 
-Use a single Bedrock relay; other chat bridges can cause duplicates. Commands,
-private messages, console output and proxy-side message forwarding are outside
+Use a single Bedrock relay; other chat bridges can cause duplicates. Other commands,
+console output and proxy-side message forwarding are outside
 the relay's scope. If signing blocks joining rather than sending chat, this relay
 cannot help because it intentionally does not change authentication or admission.
 

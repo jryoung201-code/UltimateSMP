@@ -63,7 +63,7 @@ public final class ChatBootstrap extends JavaPlugin implements Listener {
     @Override public void onDisable() { if(relay!=null) { relay.stop(); relay=null; } }
     @Override public boolean onCommand(CommandSender sender,Command cmd,String label,String[] args) {
         if(!sender.hasPermission("ultimatebedrockchat.admin")) { sender.sendMessage("You do not have permission."); return true; }
-        sender.sendMessage("UltimateBedrockChat 1.0.2 | "+status);
+        sender.sendMessage("UltimateBedrockChat 1.0.3 | "+status);
         if(relay!=null) relay.status(sender);
         return true;
     }

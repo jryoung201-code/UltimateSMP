@@ -33,12 +33,14 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
       - name: Verify chat validation
         run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.chat.PrivateMessagePolicyTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.chat.PrivateMessagesTest
           java -cp target/classes:target/test-classes shop.blinksmp.chat.ChatPolicyTest
           java -cp target/classes:target/test-classes shop.blinksmp.chat.AdminInstallerTest
           java -cp target/classes:target/test-classes shop.blinksmp.chat.BundledInstallTest
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.chat.BootstrapLoadTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateBedrockChat-1.0.2
-          path: bedrock-chat/target/UltimateBedrockChat-1.0.2.jar
+          name: UltimateBedrockChat-1.0.3
+          path: bedrock-chat/target/UltimateBedrockChat-1.0.3.jar
           if-no-files-found: error
