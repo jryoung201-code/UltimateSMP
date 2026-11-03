@@ -1,0 +1,27 @@
+name: UltimateAnnouncements
+version: 1.0.0
+main: shop.blinksmp.announcements.UltimateAnnouncements
+api-version: '1.21.11'
+author: Aven
+description: Scheduled announcements and a cancellable save-and-stop restart countdown.
+commands:
+  announce:
+    description: Broadcast a chat announcement
+    usage: /announce <message>
+    permission: ultimateannouncements.manage
+  announcements:
+    description: Manage or preview announcements
+    usage: /announcements <list|send|preview|pause|resume|reload|status>
+    aliases: [uannounce]
+    permission: ultimateannouncements.manage
+  restartcountdown:
+    description: Start or cancel a save-and-stop countdown (host must restart the process)
+    usage: /restartcountdown [1-3600|cancel|status]
+    permission: ultimateannouncements.restart
+permissions:
+  ultimateannouncements.manage:
+    description: Broadcast, preview and manage scheduled announcements
+    default: op
+  ultimateannouncements.restart:
+    description: Start or cancel a server shutdown countdown
+    default: op

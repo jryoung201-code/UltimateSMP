@@ -1,0 +1,31 @@
+name: Build UltimateAnnouncements
+on:
+  push:
+    paths: ['ultimate-announcements/**', '.github/workflows/announcements.yml']
+  pull_request:
+    paths: ['ultimate-announcements/**', '.github/workflows/announcements.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-announcements
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package
+      - name: Verify countdown and rotation
+        run: java -cp target/classes:target/test-classes shop.blinksmp.announcements.AnnouncementRulesTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateAnnouncements-1.0.0
+          path: ultimate-announcements/target/UltimateAnnouncements-1.0.0.jar
+          if-no-files-found: error

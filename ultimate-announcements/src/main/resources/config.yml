@@ -1,0 +1,41 @@
+# Paper 1.21.11 / Java 21. No extra plugins required.
+server-name: "UltimateSMP"
+enabled: true
+interval-seconds: 300
+random-order: false
+# Announcements are skipped while nobody is online or a restart is counting down.
+# & colors and {player}, {server}, {online}, {max_players} placeholders are supported.
+manual-prefix: "&6&lANNOUNCEMENT &8» &f"
+
+announcements:
+  welcome:
+    enabled: true
+    display: chat
+    messages:
+      - "&6&l{server}"
+      - "&fWelcome, {player}! Be respectful and have fun."
+  settings:
+    enabled: true
+    display: actionbar
+    messages:
+      - "&eUse /settings to personalize your experience!"
+  # Supported display values: chat, title, actionbar, bossbar.
+  # For a title, messages[0] is the title; remaining lines become the subtitle.
+  # duration-seconds applies to titles and boss bars (1-60 seconds).
+  # example-title:
+  #   enabled: true
+  #   display: title
+  #   duration-seconds: 5
+  #   messages: ["&6{server}", "&fEnjoy your stay!"]
+
+restart:
+  default-seconds: 10
+  chat: true
+  title: true
+  countdown-message: "&cServer is restarting in {seconds}..."
+  countdown-title: "&c&l{seconds}"
+  countdown-subtitle: "&eServer is restarting"
+  final-message: "&c&lRestarting......"
+  cancelled-message: "&aServer restart cancelled."
+# At zero this plugin saves worlds and STOPS the server.
+# Configure your hosting panel to automatically start it again.
