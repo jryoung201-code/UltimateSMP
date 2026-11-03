@@ -1,0 +1,33 @@
+name: Build UltimateRanks
+on:
+  push:
+    paths: ['ultimate-ranks/**', '.github/workflows/ranks.yml']
+  pull_request:
+    paths: ['ultimate-ranks/**', '.github/workflows/ranks.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-ranks
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+      - name: Verify authorization and persistence
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.ranks.RulesTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.ranks.StoreTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateRanks-1.0.0
+          path: ultimate-ranks/target/UltimateRanks-1.0.0.jar
+          if-no-files-found: error

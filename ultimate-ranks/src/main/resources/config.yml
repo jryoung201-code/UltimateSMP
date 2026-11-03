@@ -1,0 +1,18 @@
+prefixes:
+  OWNER: '&4&l[OWNER] &r'
+  DEV: '&b&l[DEV] &r'
+  ADMIN: '&c&l[ADMIN] &r'
+  MOD: '&2&l[MOD] &r'
+  TRIAL_MOD: '&e[TRIAL MOD] &r'
+  HELPER: '&a[HELPER] &r'
+  MEMBER: '&7[MEMBER] &r'
+# These are exact-rank permissions, not inherited. Never grants OP or wildcard '*'.
+# Restart after editing this config.
+extra-permissions:
+  OWNER: [ultimateoptimize.admin]
+  DEV: [ultimateoptimize.admin]
+  ADMIN: [ultimateoptimize.admin]
+  MOD: []
+  TRIAL_MOD: []
+  HELPER: []
+  MEMBER: []

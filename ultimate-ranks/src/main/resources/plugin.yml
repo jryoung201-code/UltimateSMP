@@ -1,0 +1,122 @@
+name: UltimateRanks
+version: 1.0.0
+main: shop.blinksmp.ranks.UltimateRanks
+api-version: '1.21.11'
+description: UUID ranks, prefixes and staff tools for UltimateSMP.
+author: Aven
+commands:
+  rank:
+    description: View or manage ranks
+    usage: /<command>
+    aliases: [ranks]
+  staff:
+    description: List or run staff commands
+    usage: /<command>
+    permission: ultimateranks.staff
+  staffchat:
+    description: Send a staff-only message
+    usage: /<command>
+    aliases: [sc]
+    permission: ultimateranks.command.staffchat
+  warn:
+    description: Staff warn
+    usage: /<command>
+    permission: ultimateranks.command.warn
+  warnings:
+    description: Staff warnings
+    usage: /<command>
+    permission: ultimateranks.command.warnings
+  kick:
+    description: Staff kick
+    usage: /<command>
+    permission: ultimateranks.command.kick
+  mute:
+    description: Staff mute
+    usage: /<command>
+    permission: ultimateranks.command.mute
+  unmute:
+    description: Staff unmute
+    usage: /<command>
+    permission: ultimateranks.command.unmute
+  ban:
+    description: Staff ban
+    usage: /<command>
+    permission: ultimateranks.command.ban
+  tempban:
+    description: Staff tempban
+    usage: /<command>
+    permission: ultimateranks.command.tempban
+  unban:
+    description: Staff unban
+    usage: /<command>
+    permission: ultimateranks.command.unban
+  freeze:
+    description: Staff freeze
+    usage: /<command>
+    permission: ultimateranks.command.freeze
+  vanish:
+    description: Staff vanish
+    usage: /<command>
+    aliases: [v]
+    permission: ultimateranks.command.vanish
+  invsee:
+    description: Staff invsee
+    usage: /<command>
+    permission: ultimateranks.command.invsee
+  tp:
+    description: Staff tp
+    usage: /<command>
+    permission: ultimateranks.command.tp
+  bring:
+    description: Staff bring
+    usage: /<command>
+    permission: ultimateranks.command.bring
+  gsp:
+    description: Staff gsp
+    usage: /<command>
+    permission: ultimateranks.command.gsp
+  heal:
+    description: Staff heal
+    usage: /<command>
+    permission: ultimateranks.command.heal
+  feed:
+    description: Staff feed
+    usage: /<command>
+    permission: ultimateranks.command.feed
+permissions:
+  ultimateranks.command.ban:
+    default: false
+  ultimateranks.command.bring:
+    default: false
+  ultimateranks.command.feed:
+    default: false
+  ultimateranks.command.freeze:
+    default: false
+  ultimateranks.command.gsp:
+    default: false
+  ultimateranks.command.heal:
+    default: false
+  ultimateranks.command.invsee:
+    default: false
+  ultimateranks.command.kick:
+    default: false
+  ultimateranks.command.mute:
+    default: false
+  ultimateranks.command.staffchat:
+    default: false
+  ultimateranks.command.tempban:
+    default: false
+  ultimateranks.command.tp:
+    default: false
+  ultimateranks.command.unban:
+    default: false
+  ultimateranks.command.unmute:
+    default: false
+  ultimateranks.command.vanish:
+    default: false
+  ultimateranks.command.warn:
+    default: false
+  ultimateranks.command.warnings:
+    default: false
+  ultimateranks.staff:
+    default: false
