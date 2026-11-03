@@ -28,7 +28,7 @@ public final class BootstrapLoadTest {
             if(attempts.get()!=0) throw new AssertionError("Bootstrap attempted to resolve PacketEvents before installation");
             try(var in=isolated.getResourceAsStream("plugin.yml")) {
                 String yaml=new String(Objects.requireNonNull(in).readAllBytes(),java.nio.charset.StandardCharsets.UTF_8);
-                if(yaml.contains("depend: [packetevents")) throw new AssertionError("PacketEvents must not be a hard dependency");
+                if(yaml.lines().anyMatch(line -> line.startsWith("depend:") && line.toLowerCase(Locale.ROOT).contains("packetevents"))) throw new AssertionError("PacketEvents must not be a hard dependency");
                 if(!yaml.contains("main: shop.blinksmp.chat.ChatBootstrap")) throw new AssertionError("Wrong bootstrap entry point");
             }
         }
