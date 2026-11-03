@@ -1,0 +1,33 @@
+name: Build UltimateTrades
+on:
+  push:
+    paths: ['ultimate-trades/**', '.github/workflows/trades.yml']
+  pull_request:
+    paths: ['ultimate-trades/**', '.github/workflows/trades.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-trades
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+      - name: Verify confirmations and inventories
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.trades.TradeStateTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.trades.InventoryPlanTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateTrades-1.0.0
+          path: ultimate-trades/target/UltimateTrades-1.0.0.jar
+          if-no-files-found: error

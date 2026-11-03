@@ -1,0 +1,16 @@
+name: UltimateTrades
+version: 1.0.0
+main: shop.blinksmp.trades.UltimateTrades
+api-version: '1.21.11'
+author: Aven
+description: Player-to-player item trading with two confirmations and inventory validation.
+commands:
+  trade:
+    description: Request, accept, deny or cancel an item trade
+    usage: /trade <player|accept [player]|deny [player]|cancel|toggle|help>
+    aliases: [trading]
+    permission: ultimatetrades.use
+permissions:
+  ultimatetrades.use:
+    description: Request and accept player item trades
+    default: true

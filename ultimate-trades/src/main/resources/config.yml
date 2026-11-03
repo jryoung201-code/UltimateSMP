@@ -1,0 +1,8 @@
+# Paper 1.21.11 / Java 21. Works with Geyser's standard chest inventory interface.
+request-timeout-seconds: 30
+request-cooldown-seconds: 5
+trade-timeout-seconds: 180
+confirmation-seconds: 3
+# Players must remain in the same world and within this distance.
+max-distance: 16
+# 12 offered stacks per person. Money trading is not included.
