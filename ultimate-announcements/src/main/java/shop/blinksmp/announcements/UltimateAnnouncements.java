@@ -82,7 +82,7 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
         if(stopping) return;
         if(countdown.active()) {
             if(System.nanoTime()-nextCountdownNanos>=0) {
-                nextCountdownNanos=System.nanoTime()+1_000_000_000L;
+                nextCountdownNanos+=1_000_000_000L; // Keep the original clock phase; scheduler jitter must not accumulate.
                 int remaining=countdown.tick();
                 if(remaining==0) finishRestart(); else restartNotice(remaining);
             }
