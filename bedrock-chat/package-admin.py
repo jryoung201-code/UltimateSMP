@@ -10,7 +10,8 @@ payload = source.read_bytes()
 with zipfile.ZipFile(source) as jar:
     assert "version: 1.0.1" in jar.read("plugin.yml").decode()
     assert b"bd33980d-5b8d-4f1c-becc-0520f92c4a0d" in jar.read("shop/blinksmp/gui/GuiRules.class")
-    assert jar.testzip() is None
+    bad = jar.testzip()
+    assert bad is None, f"GUI ZIP verification failed: {bad}"
 target = Path(__file__).resolve().parent / "build/generated-resources/bundled"
 target.mkdir(parents=True, exist_ok=True)
 (target / "UltimateGUI.jar").write_bytes(payload)
@@ -29,7 +30,8 @@ packet_payload = packets.read_bytes()
 assert hashlib.sha256(packet_payload).hexdigest() == expected, "Official PacketEvents checksum mismatch"
 with zipfile.ZipFile(packets) as jar:
     assert "version: 2.14.0" in jar.read("plugin.yml").decode()
-    assert jar.testzip() is None
+    bad = jar.testzip()
+    assert bad is None, f"PacketEvents ZIP verification failed: {bad}"
 (target / "PacketEvents.jar").write_bytes(packet_payload)
 (target / "packetevents.properties").write_text("version=2.14.0\nsha256=" + expected + "\n")
 (target / "THIRD-PARTY.txt").write_text(
