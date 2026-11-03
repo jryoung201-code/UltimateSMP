@@ -2,11 +2,12 @@ package shop.blinksmp.trades;
 
 import java.util.*;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.Material;
 
 /** Computes complete replacement inventories without mutating either input or offer. */
 public final class InventoryPlan {
     private InventoryPlan() {}
-    public static boolean empty(ItemStack item) { return item==null || item.getType().isAir() || item.getAmount()<=0; }
+    public static boolean empty(ItemStack item) { return item==null || (item.getType()==Material.AIR || item.getType()==Material.CAVE_AIR || item.getType()==Material.VOID_AIR) || item.getAmount()<=0; }
     public static ItemStack[] copy(ItemStack[] source) {
         ItemStack[] result=new ItemStack[source.length];
         for(int i=0;i<source.length;i++) result[i]=empty(source[i])?null:source[i].clone();
