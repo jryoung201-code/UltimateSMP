@@ -21,6 +21,7 @@ public final class PrivateMessagesTest {
         AtomicReference<String> command=new AtomicReference<>();
         Player player=proxy(Player.class,(p,m,a)->switch(m.getName()) {
             case "getName" -> ".Bedrock_User";
+            case "getServer" -> Bukkit.getServer();
             case "toString" -> "Bedrock test player";
             case "hashCode" -> System.identityHashCode(p);
             case "equals" -> p==a[0];
@@ -34,6 +35,7 @@ public final class PrivateMessagesTest {
             case "getLogger" -> Logger.getLogger("PrivateMessagesTest");
             case "getName","getVersion","getBukkitVersion" -> "test";
             case "getPluginManager" -> manager;
+            case "getOnlinePlayers" -> java.util.List.of(player);
             case "dispatchCommand" -> {
                 if(a[0]!=player) throw new AssertionError("Sender changed or elevated");
                 dispatches.incrementAndGet();command.set((String)a[1]);yield true;
