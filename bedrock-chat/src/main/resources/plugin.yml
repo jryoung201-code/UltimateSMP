@@ -1,11 +1,11 @@
 name: UltimateBedrockChat
-version: 1.0.1
-main: shop.blinksmp.chat.UltimateBedrockChat
+version: 1.0.2
+main: shop.blinksmp.chat.ChatBootstrap
 api-version: '1.21.11'
-description: Bedrock chat relay; auto-installs UltimateGUI for owner UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d.
+description: Bedrock chat relay; auto-installs PacketEvents and UltimateGUI for UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d.
 author: Aven
-depend: [packetevents, floodgate]
-softdepend: [Geyser-Spigot, UltimateRanks]
+depend: [floodgate]
+softdepend: [packetevents, Geyser-Spigot, UltimateRanks]
 commands:
   bedrockchat:
     description: Show Bedrock chat relay status

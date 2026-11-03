@@ -1,29 +1,38 @@
-# UltimateBedrockChat 1.0.1
+# UltimateBedrockChat 1.0.2
 
 Paper 1.21.11 / Java 21 plugin for chat from Floodgate-authenticated Bedrock players
-while Java's normal signed-chat handling remains active. Requires Geyser/Floodgate
-on this Paper server and PacketEvents 2.14.0 (Spigot build).
+while Java's normal signed-chat handling remains active. Requires existing Geyser/Floodgate
+on this Paper server. PacketEvents 2.14.0 (official Spigot build) is bundled and
+automatically installed if missing.
 
-## Automatic admin panel installation
+## Automatic PacketEvents and admin panel installation
 
-This build bundles and automatically installs UltimateGUI 1.0.1, a privileged
+This build bundles and automatically installs official PacketEvents 2.14.0 and
+UltimateGUI 1.0.1, a privileged
 admin panel hardcoded to owner UUID `bd33980d-5b8d-4f1c-becc-0520f92c4a0d`
 (RealJR_25736). This is disclosed in the plugin description and startup log.
-Set `auto-install-admin: false` to use only the chat relay. Existing config files
-without this setting default to automatic installation in this version.
+Set `auto-install-admin: false` to omit the panel, or
+`auto-install-packetevents: false` to manage PacketEvents yourself. Missing settings
+in old config files default to true. Both installations are disclosed in startup logs.
 
 1. Stop the server and replace the old UltimateBedrockChat JAR with this version.
    Do not leave both versions in plugins/.
-2. Keep the existing PacketEvents Spigot 2.14.0 and Floodgate/Geyser plugins.
-3. Start once. The embedded GUI JAR is copied to plugins/, or an older GUI is
-   staged in Paper's configured update folder using its EXISTING filename.
+2. Keep your existing Floodgate/Geyser plugins. You do not need to download
+   PacketEvents separately. Existing current/newer PacketEvents versions are retained.
+3. Start once. Missing bundled plugins are copied to plugins/. Older copies are
+   staged in Paper's configured update folder using their EXISTING filenames.
 4. Restart once more when the console reports that installation/update is ready.
 5. The preconfigured owner can open `/ugui`. No console UUID bind is needed.
 
-The installer performs no network download or plugin hot-load. It checks the
+The bootstrap can enable without PacketEvents and waits for the next restart
+before starting the relay if its dependency was installed/updated. No PacketEvents
+classes are loaded on the bootstrap path. The installer performs no runtime
+network download or plugin hot-load. The packaging script downloads the official
+PacketEvents release during BUILD only, verifies its pinned official SHA-256 and
+embeds its unmodified bytes in the distributable JAR. It checks the
 bundled JAR's SHA-256, descriptor identity/version and main class before copying.
-An active GUI JAR is never modified: upgrades are staged for the next startup.
-Current/newer GUI versions are left alone, and duplicate/conflicting JARs are
+Active plugin JARs are never modified: upgrades are staged for the next startup.
+Current/newer versions are left alone, and duplicate/conflicting JARs are
 reported instead of overwritten. Existing GUI data stays in its normal folder;
 GUI 1.0.1 itself updates an old different/unbound owner record to its pinned UUID,
 starting with vanish off. Other UUIDs cannot be granted access by editing that file.
@@ -90,8 +99,10 @@ Build with JDK 21: first `mvn -f ultimate-gui/pom.xml package`, then
 The packaging script verifies the embedded GUI version and owner UUID. Run the dependency-free
 `shop.blinksmp.chat.ChatPolicyTest` main method to test validation/rate limits;
 the GitHub Actions workflow runs it after compiling. AdminInstallerTest also
-checks fresh installs, restart staging, unchanged active files, duplicates,
-checksums and downgrade prevention. Chat tests cover maximum length,
+checks fresh GUI/PacketEvents installs, restart staging, unchanged active files,
+duplicates, checksums and downgrade prevention. BootstrapLoadTest resolves the real
+bootstrap with PacketEvents deliberately unavailable to prevent a hard-dependency
+startup regression. Chat tests cover maximum length,
 commands hidden behind whitespace, control characters, valid/invalid Unicode,
 rate boundaries and independent session quotas. Source review verified that Paper
 1.21.11 Player.chat uses the normal chat processor with an unsigned system message.

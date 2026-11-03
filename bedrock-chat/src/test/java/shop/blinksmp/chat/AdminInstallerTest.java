@@ -10,11 +10,14 @@ public final class AdminInstallerTest {
     private static int checks;
     private static void check(boolean c,String message) { checks++; if(!c) throw new AssertionError(message); }
     private static byte[] jar(String name,String version) throws IOException {
+        return jar(name,"shop.blinksmp.gui.UltimateGUI",version);
+    }
+    private static byte[] jar(String name,String main,String version) throws IOException {
         ByteArrayOutputStream bytes=new ByteArrayOutputStream();
         try(ZipOutputStream z=new ZipOutputStream(bytes)) {
             z.putNextEntry(new ZipEntry("plugin.yml"));
-            z.write(("name: "+name+"\nmain: shop.blinksmp.gui.UltimateGUI\nversion: "+version+"\n").getBytes(StandardCharsets.UTF_8)); z.closeEntry();
-            z.putNextEntry(new ZipEntry("shop/blinksmp/gui/UltimateGUI.class")); z.write(new byte[]{1,2,3}); z.closeEntry();
+            z.write(("name: "+name+"\nmain: "+main+"\nversion: "+version+"\n").getBytes(StandardCharsets.UTF_8)); z.closeEntry();
+            z.putNextEntry(new ZipEntry(main.replace('.','/')+".class")); z.write(new byte[]{1,2,3}); z.closeEntry();
         }
         return bytes.toByteArray();
     }
@@ -52,6 +55,13 @@ public final class AdminInstallerTest {
             Files.write(duplicates.resolve("plugins/a.jar"),previous); Files.write(duplicates.resolve("plugins/b.jar"),previous); failed=false;
             try { install(duplicates,payload); } catch(IOException ex) { failed=true; }
             check(failed,"Conflicting duplicate GUI plugins must be rejected");
+            Path dep=root.resolve("dependency");
+            String main="io.github.retrooper.packetevents.PacketEventsPlugin";
+            byte[] packetJar=jar("packetevents",main,"2.14.0");
+            var spec=new AdminInstaller.Spec("packetevents",main,"2.14.0");
+            check(AdminInstaller.installPlugin(dep.resolve("plugins"),dep.resolve("updates"),packetJar,AdminInstaller.sha256(packetJar),spec).restartRequired(),"Missing PacketEvents must install");
+            check(Files.exists(dep.resolve("plugins/packetevents-2.14.0.jar")),"Dependency gets its own filename");
+            check(!AdminInstaller.installPlugin(dep.resolve("plugins"),dep.resolve("updates"),packetJar,AdminInstaller.sha256(packetJar),spec).restartRequired(),"Existing dependency must not reinstall");
             System.out.println("PASS: "+checks+" auto-install, staging, checksum, downgrade and conflict checks");
         } finally { try(var paths=Files.walk(root)) { for(Path p:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); } }
     }

@@ -5,3 +5,6 @@ minimum-message-interval-ms: 750
 # bd33980d-5b8d-4f1c-becc-0520f92c4a0d (RealJR_25736).
 # First installation/upgrade requires one further restart. No network download.
 auto-install-admin: true
+# Copies official PacketEvents 2.14.0 if missing, or stages an older installed copy.
+# Restart once after installation. No runtime network download.
+auto-install-packetevents: true
