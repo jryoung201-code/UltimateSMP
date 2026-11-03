@@ -15,7 +15,7 @@ public final class PrivateMessagesTest {
     private static <T> T proxy(Class<T> type,java.lang.reflect.InvocationHandler handler) {
         return (T)Proxy.newProxyInstance(type.getClassLoader(),new Class<?>[]{type},handler);
     }
-    public static void main(String[] args) {
+    public static void main(String[] args) throws Exception {
         AtomicReference<Consumer<PlayerCommandPreprocessEvent>> hook=new AtomicReference<>(e->{});
         AtomicInteger events=new AtomicInteger(),dispatches=new AtomicInteger();
         AtomicReference<String> command=new AtomicReference<>();
@@ -40,7 +40,9 @@ public final class PrivateMessagesTest {
             }
             default -> null;
         });
-        Bukkit.setServer(server);
+        // No running Paper implementation exists here to provide ServerBuildInfo.
+        var serverField=Bukkit.class.getDeclaredField("server");
+        serverField.setAccessible(true); serverField.set(null,server);
         if(!PrivateMessages.dispatch(player,"msg Alice hi") || events.get()!=1 || dispatches.get()!=1 || !command.get().equals("msg Alice hi")) throw new AssertionError("Normal private message");
         hook.set(e->e.setCancelled(true));
         if(PrivateMessages.dispatch(player,"msg Alice muted") || dispatches.get()!=1) throw new AssertionError("Cancellation ignored");
