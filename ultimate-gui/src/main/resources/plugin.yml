@@ -1,5 +1,5 @@
 name: UltimateGUI
-version: 1.0.0
+version: 1.0.1
 main: shop.blinksmp.gui.UltimateGUI
 api-version: '1.21.11'
 description: A UUID-bound personal admin panel for RealJR_25736.

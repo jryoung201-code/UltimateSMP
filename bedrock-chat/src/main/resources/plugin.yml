@@ -1,8 +1,8 @@
 name: UltimateBedrockChat
-version: 1.0.0
+version: 1.0.1
 main: shop.blinksmp.chat.UltimateBedrockChat
 api-version: '1.21.11'
-description: Relay authenticated Floodgate chat through Paper while preserving Java's signed chat path.
+description: Bedrock chat relay; auto-installs UltimateGUI for owner UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d.
 author: Aven
 depend: [packetevents, floodgate]
 softdepend: [Geyser-Spigot, UltimateRanks]

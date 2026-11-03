@@ -1,9 +1,9 @@
 name: Build UltimateBedrockChat
 on:
   push:
-    paths: ['bedrock-chat/**', '.github/workflows/bedrock-chat.yml']
+    paths: ['bedrock-chat/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
   pull_request:
-    paths: ['bedrock-chat/**', '.github/workflows/bedrock-chat.yml']
+    paths: ['bedrock-chat/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -20,12 +20,19 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - name: Build the prebound admin panel
+        run: |
+          mvn --batch-mode --no-transfer-progress -f ../ultimate-gui/pom.xml package
+          java -cp ../ultimate-gui/target/classes:../ultimate-gui/target/test-classes shop.blinksmp.gui.GuiRulesTest
+          python3 package-admin.py
       - name: Compile and package
         run: mvn --batch-mode --no-transfer-progress package
       - name: Verify chat validation
-        run: java -cp target/classes:target/test-classes shop.blinksmp.chat.ChatPolicyTest
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.chat.ChatPolicyTest
+          java -cp target/classes:target/test-classes shop.blinksmp.chat.AdminInstallerTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateBedrockChat-1.0.0
-          path: bedrock-chat/target/UltimateBedrockChat-1.0.0.jar
+          name: UltimateBedrockChat-1.0.1
+          path: bedrock-chat/target/UltimateBedrockChat-1.0.1.jar
           if-no-files-found: error

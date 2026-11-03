@@ -28,6 +28,7 @@ public final class UltimateBedrockChat extends JavaPlugin implements Listener {
 
     @Override public void onEnable() {
         saveDefaultConfig();
+        installAdmin();
         intervalNanos=Math.max(250,Math.min(10000,getConfig().getInt("minimum-message-interval-ms",750)))*1_000_000L;
         try {
             Plugin floodgate=Objects.requireNonNull(Bukkit.getPluginManager().getPlugin("floodgate"));
@@ -75,6 +76,20 @@ public final class UltimateBedrockChat extends JavaPlugin implements Listener {
         if(!Bukkit.getOnlineMode()) getLogger().warning("online-mode=false: Java account authentication is not enforced. This plugin does not change that setting.");
     }
 
+    private void installAdmin() {
+        if(!getConfig().getBoolean("auto-install-admin",true)) return;
+        getLogger().info("Auto-installing the bundled UltimateGUI admin panel for UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d (RealJR_25736).");
+        try(var jar=getResource("bundled/UltimateGUI.jar"); var manifest=getResource("bundled/admin.properties")) {
+            if(jar==null || manifest==null) throw new java.io.IOException("Bundled admin resources are missing. Use the official packaged JAR.");
+            Properties properties=new Properties(); properties.load(manifest);
+            AdminInstaller.Result result=AdminInstaller.install(getDataFolder().toPath().getParent(),
+                    Bukkit.getUpdateFolderFile().toPath(),jar.readAllBytes(),properties.getProperty("sha256",""),properties.getProperty("version",""));
+            getLogger().info(result.message());
+        } catch(java.io.IOException|RuntimeException ex) {
+            getLogger().severe("Admin panel auto-install failed; chat relay can still run: "+ex.getMessage());
+        }
+    }
+
     private void register(Player p) {
         try {
             if(Boolean.TRUE.equals(isFloodgatePlayer.invoke(floodgateApi,p.getUniqueId())))
@@ -89,7 +104,7 @@ public final class UltimateBedrockChat extends JavaPlugin implements Listener {
     }
     @Override public boolean onCommand(CommandSender sender,Command cmd,String label,String[] args) {
         if(!sender.hasPermission("ultimatebedrockchat.admin")) { sender.sendMessage("You do not have permission."); return true; }
-        sender.sendMessage("UltimateBedrockChat 1.0.0 | verified Bedrock sessions: "+sessions.size());
+        sender.sendMessage("UltimateBedrockChat 1.0.1 | verified Bedrock sessions: "+sessions.size());
         sender.sendMessage("Intercepted: "+intercepted.sum()+" | passed to Paper chat events: "+dispatched.sum()+" | invalid/rate-limited/stale: "+rejected.sum());
         sender.sendMessage("Java messages are not relayed. Bedrock output is unsigned. Mute/filter events may cancel messages after dispatch.");
         return true;

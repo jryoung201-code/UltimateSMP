@@ -1,25 +1,22 @@
-# UltimateGUI 1.0.0
+# UltimateGUI 1.0.1
 
 Personal in-game admin panel for RealJR_25736, on Paper 1.21.11 / Java 21.
 Requires the official PacketEvents Spigot plugin, version 2.14.0. Existing
 UltimateBedrockChat already uses the same dependency; do not add a duplicate JAR.
 
-## Install and bind the owner
+## Install and preconfigured owner
 
-1. Stop the server and put UltimateGUI-1.0.0.jar in plugins/.
-2. Start the server and have RealJR_25736 join.
-3. Run this once in the SERVER CONSOLE:
+UltimateBedrockChat 1.0.1 automatically installs this panel, or stages an older
+installed copy through Paper's update folder. Restart once after an installation
+or staged update is reported. You can also manually replace the old GUI JAR with
+UltimateGUI-1.0.1.jar while the server is stopped.
 
-   `ultimategui bind RealJR_25736`
-
-4. RealJR_25736 can use `/ultimategui` or `/ugui` to open the panel.
-
-The binding records that online player's server UUID in plugins/UltimateGUI/owner.yml.
-No access is granted before binding. The plugin does not give access based on OP,
-rank, a permission wildcard or a matching name on subsequent use. Console can bind
-the account but cannot open/use the inventory panel. There is no in-game binding
-command, automatic first-player owner, or permission override. Only the console
-bind route accepts the exact RealJR_25736 name. The UUID binding survives renames.
+The sole owner is hardcoded to UUID `bd33980d-5b8d-4f1c-becc-0520f92c4a0d`.
+Open `/ugui` or `/ultimategui` using that account. No console bind is required;
+OP, ranks, names and edited owner.yml UUIDs cannot override the access check.
+Console can display the configured UUID but cannot rebind/open the panel.
+Existing owner.yml vanish state is retained only if its UUID matches this owner;
+an older different/unbound owner state is updated with vanish off.
 
 Identity is only as strong as the server's authentication: offline-mode servers
 can allow username/derived-UUID impersonation. Use authenticated Java login or a
@@ -72,8 +69,7 @@ on the normal execution, permission and logging path. It is not a general silent
 command executor. Root commands have no signed chat arguments.
 
 Panel gamemode/vanish actions use APIs and do not call commands, send OP broadcasts
-or write routine action messages to this plugin's logger. Console binding and
-startup/errors remain visible. It does not erase logs or install global logging
+or write routine action messages to this plugin's logger. Startup/errors remain visible. It does not erase logs or install global logging
 filters. Standard Minecraft connection/disconnection lines can still be logged.
 Host consoles, packet loggers, third-party audit plugins, web maps, management
 APIs, plugin-specific player lists, cached completions, sounds/events generated

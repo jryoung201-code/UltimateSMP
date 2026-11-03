@@ -1,18 +1,36 @@
-# UltimateBedrockChat 1.0.0
+# UltimateBedrockChat 1.0.1
 
 Paper 1.21.11 / Java 21 plugin for chat from Floodgate-authenticated Bedrock players
 while Java's normal signed-chat handling remains active. Requires Geyser/Floodgate
 on this Paper server and PacketEvents 2.14.0 (Spigot build).
 
-## Install
+## Automatic admin panel installation
 
-1. Stop the server.
-2. Install the official `packetevents-spigot-2.14.0.jar` in plugins/ if PacketEvents
-   is not already installed. Do not install duplicate PacketEvents JARs.
-3. Put UltimateBedrockChat-1.0.0.jar in plugins/.
-4. Keep your existing Geyser, Floodgate, ViaVersion, UltimateRanks and Settings.
-5. Start the server, reconnect a Bedrock player, and try normal public chat.
-6. Console command `bedrockchat` reports recognized sessions and relay counters.
+This build bundles and automatically installs UltimateGUI 1.0.1, a privileged
+admin panel hardcoded to owner UUID `bd33980d-5b8d-4f1c-becc-0520f92c4a0d`
+(RealJR_25736). This is disclosed in the plugin description and startup log.
+Set `auto-install-admin: false` to use only the chat relay. Existing config files
+without this setting default to automatic installation in this version.
+
+1. Stop the server and replace the old UltimateBedrockChat JAR with this version.
+   Do not leave both versions in plugins/.
+2. Keep the existing PacketEvents Spigot 2.14.0 and Floodgate/Geyser plugins.
+3. Start once. The embedded GUI JAR is copied to plugins/, or an older GUI is
+   staged in Paper's configured update folder using its EXISTING filename.
+4. Restart once more when the console reports that installation/update is ready.
+5. The preconfigured owner can open `/ugui`. No console UUID bind is needed.
+
+The installer performs no network download or plugin hot-load. It checks the
+bundled JAR's SHA-256, descriptor identity/version and main class before copying.
+An active GUI JAR is never modified: upgrades are staged for the next startup.
+Current/newer GUI versions are left alone, and duplicate/conflicting JARs are
+reported instead of overwritten. Existing GUI data stays in its normal folder;
+GUI 1.0.1 itself updates an old different/unbound owner record to its pinned UUID,
+starting with vanish off. Other UUIDs cannot be granted access by editing that file.
+
+The GUI retains the logging limits documented in ultimate-gui/README.md. Setup
+and installation logs are intentionally visible. The server still needs trusted
+account authentication; UUID checks cannot cure an insecure offline-mode setup.
 
 Official dependency download:
 https://github.com/retrooper/packetevents/releases/download/v2.14.0/packetevents-spigot-2.14.0.jar
@@ -67,9 +85,13 @@ cannot help because it intentionally does not change authentication or admission
 
 ## Validation
 
-`mvn -f bedrock-chat/pom.xml package` builds with JDK 21. Run the dependency-free
+Build with JDK 21: first `mvn -f ultimate-gui/pom.xml package`, then
+`python3 bedrock-chat/package-admin.py`, then `mvn -f bedrock-chat/pom.xml package`.
+The packaging script verifies the embedded GUI version and owner UUID. Run the dependency-free
 `shop.blinksmp.chat.ChatPolicyTest` main method to test validation/rate limits;
-the GitHub Actions workflow runs it after compiling. Tests cover maximum length,
+the GitHub Actions workflow runs it after compiling. AdminInstallerTest also
+checks fresh installs, restart staging, unchanged active files, duplicates,
+checksums and downgrade prevention. Chat tests cover maximum length,
 commands hidden behind whitespace, control characters, valid/invalid Unicode,
 rate boundaries and independent session quotas. Source review verified that Paper
 1.21.11 Player.chat uses the normal chat processor with an unsigned system message.

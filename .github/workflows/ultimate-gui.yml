@@ -26,6 +26,6 @@ jobs:
         run: java -cp target/classes:target/test-classes shop.blinksmp.gui.GuiRulesTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateGUI-1.0.0
-          path: ultimate-gui/target/UltimateGUI-1.0.0.jar
+          name: UltimateGUI-1.0.1
+          path: ultimate-gui/target/UltimateGUI-1.0.1.jar
           if-no-files-found: error

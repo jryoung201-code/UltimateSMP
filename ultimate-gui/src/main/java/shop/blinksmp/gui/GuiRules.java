@@ -4,6 +4,7 @@ import java.util.*;
 
 public final class GuiRules {
     public static final String OWNER_NAME="RealJR_25736";
+    public static final UUID OWNER_UUID=UUID.fromString("bd33980d-5b8d-4f1c-becc-0520f92c4a0d");
     private GuiRules() {}
     public static boolean allowed(UUID bound,UUID caller) { return bound!=null && bound.equals(caller); }
     public static boolean command(String raw) {

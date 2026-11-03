@@ -1,3 +1,7 @@
 # A lightweight rate limit supplements your normal chat/mute plugins.
 # Accepted range: 250..10000. Restart after editing.
 minimum-message-interval-ms: 750
+# Installs the bundled owner-only UltimateGUI, prebound to
+# bd33980d-5b8d-4f1c-becc-0520f92c4a0d (RealJR_25736).
+# First installation/upgrade requires one further restart. No network download.
+auto-install-admin: true

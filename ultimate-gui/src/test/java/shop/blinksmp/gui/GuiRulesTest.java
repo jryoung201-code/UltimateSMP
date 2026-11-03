@@ -7,6 +7,8 @@ public final class GuiRulesTest {
     private static void check(boolean c,String m) { checks++; if(!c) throw new AssertionError(m); }
     public static void main(String[] args) {
         UUID owner=UUID.randomUUID(),other=UUID.randomUUID();
+        check(GuiRules.OWNER_UUID.toString().equals("bd33980d-5b8d-4f1c-becc-0520f92c4a0d"),"Owner UUID must match the supplied account");
+        check(!GuiRules.allowed(GuiRules.OWNER_UUID,other),"Other users cannot access the prebound panel");
         check(!GuiRules.allowed(null,owner),"Unbound panel must deny access");
         check(!GuiRules.allowed(owner,null),"No caller must be denied");
         check(!GuiRules.allowed(owner,other),"Different UUID must be denied even with OP/name/role");

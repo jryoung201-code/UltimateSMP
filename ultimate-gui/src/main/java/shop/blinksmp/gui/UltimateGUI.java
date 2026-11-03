@@ -30,7 +30,7 @@ import net.kyori.adventure.text.Component;
 import net.kyori.adventure.text.format.NamedTextColor;
 
 public final class UltimateGUI extends JavaPlugin implements Listener,TabCompleter {
-    private volatile UUID ownerId;
+    private final UUID ownerId=GuiRules.OWNER_UUID;
     private volatile boolean vanished;
     private volatile Session owner;
     private volatile String ownerName=GuiRules.OWNER_NAME;
@@ -48,9 +48,10 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
         try {
             if(Files.exists(statePath)) {
                 YamlConfiguration state=new YamlConfiguration(); state.load(statePath.toFile());
-                String id=state.getString("owner-uuid",""); ownerId=id.isBlank()?null:UUID.fromString(id);
-                vanished=state.getBoolean("vanished",false);
+                String id=state.getString("owner-uuid","");
+                vanished=ownerId.toString().equalsIgnoreCase(id) && state.getBoolean("vanished",false);
             }
+            save(ownerId,vanished);
         } catch(Exception ex) { getLogger().severe("Cannot read owner.yml; access disabled and file preserved: "+ex); Bukkit.getPluginManager().disablePlugin(this); return; }
         Bukkit.getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("ultimategui")).setTabCompleter(this);
@@ -77,7 +78,6 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
             }
         };
         PacketEvents.getAPI().getEventManager().registerListener(packetListener);
-        if(ownerId==null) getLogger().info("First setup: have RealJR_25736 join, then SERVER CONSOLE: ultimategui bind RealJR_25736");
         getLogger().info("UltimateGUI enabled. Quiet GUI actions do not dispatch commands or OP broadcasts.");
     }
     @Override public void onDisable() {
@@ -148,18 +148,7 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
     }
     @Override public boolean onCommand(CommandSender s,Command cmd,String alias,String[] args) {
         if(s instanceof ConsoleCommandSender) {
-            if(args.length==2 && args[0].equalsIgnoreCase("bind") && args[1].equalsIgnoreCase(GuiRules.OWNER_NAME)) {
-                Player p=Bukkit.getPlayerExact(GuiRules.OWNER_NAME);
-                if(p==null) { say(s,"RealJR_25736 must join first."); return true; }
-                try { save(p.getUniqueId(),false); }
-                catch(IOException ex) { say(s,"Could not save owner UUID: "+ex.getMessage()); return true; }
-                Session old=owner;
-                if(old!=null) { restore(old); for(Player v:Bukkit.getOnlinePlayers()) v.showPlayer(this,old.player()); old.player().closeInventory(); }
-                ownerId=p.getUniqueId(); vanished=false; attach(p);
-                say(s,"Bound "+p.getName()+" to UUID "+ownerId+". OP and ranks do not bypass this binding.");
-                p.updateCommands(); return true;
-            }
-            say(s,"Setup: ultimategui bind RealJR_25736 (player must be online). Console cannot open the GUI."); return true;
+            say(s,"Owner UUID is preconfigured: "+ownerId+". No bind step is needed. Console cannot open or rebind this GUI."); return true;
         }
         if(!(s instanceof Player p) || !authorized(p)) { say(s,"Only the bound RealJR_25736 account can use UltimateGUI."); return true; }
         open(p); return true;
