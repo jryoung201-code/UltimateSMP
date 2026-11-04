@@ -1,0 +1,36 @@
+name: UltimateTPR
+version: 1.0.0
+main: shop.blinksmp.tpr.UltimateTPR
+api-version: '1.21.11'
+author: Aven
+description: Consent-based player teleport requests for Java and Geyser Bedrock players.
+commands:
+  tpr:
+    description: Request to teleport to a player
+    aliases: [teleportRequest]
+    usage: /tpr <player>
+    permission: ultimatetpr.use
+  tprhere:
+    description: Ask a player to teleport to you
+    aliases: [teleportRequestHere]
+    usage: /tprhere <player>
+    permission: ultimatetpr.use
+  tpraccept:
+    description: Accept a teleport request sent to you
+    aliases: [teleportRequestAccept]
+    usage: /tprAccept [player]
+    permission: ultimatetpr.use
+  tprcancel:
+    description: Cancel your outgoing request or a warmup you are part of
+    aliases: [teleportRequestCancel]
+    usage: /tprCancel
+    permission: ultimatetpr.use
+  tprdeny:
+    description: Decline a teleport request sent to you
+    aliases: [teleportRequestDeny]
+    usage: /tprDeny [player]
+    permission: ultimatetpr.use
+permissions:
+  ultimatetpr.use:
+    description: Send, accept, cancel and deny teleport requests
+    default: true

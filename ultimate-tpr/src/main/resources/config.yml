@@ -1,0 +1,9 @@
+# Paper 1.21.11 / Java 21. Java and Geyser Bedrock players use the same commands.
+request-timeout-seconds: 30
+request-cooldown-seconds: 5
+warmup-seconds: 3
+max-incoming-requests: 5
+allow-cross-world: true
+# The mover must stay still and avoid damage during the warmup.
+# The destination is the other player's position when they accept.
+# Unloaded chunks, unsafe ground and positions outside the world border are rejected.

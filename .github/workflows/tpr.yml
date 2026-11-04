@@ -1,0 +1,33 @@
+name: Build UltimateTPR
+on:
+  push:
+    paths: ['ultimate-tpr/**', '.github/workflows/tpr.yml']
+  pull_request:
+    paths: ['ultimate-tpr/**', '.github/workflows/tpr.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-tpr
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+      - name: Verify requests and command aliases
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.tpr.RequestBookTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.tpr.CommandAliasesTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateTPR-1.0.0
+          path: ultimate-tpr/target/UltimateTPR-1.0.0.jar
+          if-no-files-found: error
