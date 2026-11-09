@@ -1,0 +1,16 @@
+name: UltimateAttributeSwap
+version: 1.0.0
+main: shop.blinksmp.swap.UltimateAttributeSwap
+api-version: '1.21.11'
+author: Aven
+description: Restores vanilla attribute-swap timing using Paper 1.21.11's equipment-update switch.
+commands:
+  attributeswap:
+    aliases: [aswap]
+    description: Control vanilla attribute-swap restoration
+    usage: /attributeswap <status|on|off|reload>
+    permission: ultimateattributeswap.admin
+permissions:
+  ultimateattributeswap.admin:
+    description: Change server-wide attribute swap restoration
+    default: op

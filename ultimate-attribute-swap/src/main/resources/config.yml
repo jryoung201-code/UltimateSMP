@@ -1,0 +1,4 @@
+# Restore vanilla equipment-update timing on Paper 1.21.11.
+# This is a server-wide change, not a per-player permission.
+enabled: true
+# No damage multipliers or item modifications are applied.
