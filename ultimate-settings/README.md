@@ -1,4 +1,4 @@
-# UltimateSettings 1.0.0
+# UltimateSettings 1.0.1
 
 Paper 1.21.11 / Java 21. Every player can use `/settings` (aliases `/prefs` and
 `/preferences`) without OP or a staff rank. Java inventory menus work through
@@ -97,3 +97,28 @@ workflow builds UltimateRanks 1.0.1 and checks authorization/punishment storage.
 No live Paper server or Bedrock client is available in this build environment;
 menu interaction, Geyser rendering and scoreboard integration still need an
 in-game check.
+
+## Monster-only natural spawning opt-out (1.0.1)
+
+In `/settings`, toggle **Exclude Me: Natural Monsters**. ON opts your player out
+as a reason for new natural monster spawns. OFF restores normal participation.
+You can also use `/settings toggle exclude-monsters`. The choice is saved per
+UUID and defaults OFF for existing/new players. Reset returns it to OFF.
+
+Only NATURAL spawn attempts in Bukkit's MONSTER category are filtered. Animals,
+breeding, spawners, spawn eggs, raids and other spawn reasons are unaffected.
+Another nearby eligible player can still permit a monster spawn in shared areas.
+Existing monsters are not deleted and can still approach you or count toward
+normal caps. This is not damage immunity or a private monster-free region.
+
+The implementation vetoes spawn attempts when opted-out players are the only
+eligible natural-spawning players in range. It consults Paper's per-player
+spawning-radius event where available and the 128-block natural monster range.
+It never calls Player.setAffectsSpawning(false), because that would affect animals.
+It does **not** remove/subtract a fixed player share from Paper's global cap or
+rewrite its internal per-player mob-count arrays. A literal cap-accounting change
+requires a server-side spawning implementation change beyond this setting.
+
+Tests cover monster-only/natural-only filtering, overlapping players, disabled
+spawn participation, ranges, preference isolation and migration from old saves.
+Live world spawning behavior and other plugins' overrides still need testing.

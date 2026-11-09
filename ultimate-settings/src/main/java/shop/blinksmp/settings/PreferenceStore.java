@@ -8,7 +8,7 @@ import java.util.*;
 import org.bukkit.configuration.file.YamlConfiguration;
 
 public final class PreferenceStore {
-    public static final List<String> KEYS=List.of("booster","rank-tags","players","messages","join-messages","coordinates");
+    public static final List<String> KEYS=List.of("booster","rank-tags","players","messages","join-messages","coordinates","exclude-monsters");
     private final Path path;
     private volatile Map<UUID,Preferences> state=Map.of();
     public PreferenceStore(Path path) throws Exception {
@@ -27,7 +27,7 @@ public final class PreferenceStore {
             loaded.put(UUID.fromString(id),new Preferences(
                     y.getBoolean(base+"booster",false),y.getBoolean(base+"rank-tags",true),
                     y.getBoolean(base+"players",true),y.getBoolean(base+"messages",true),
-                    y.getBoolean(base+"join-messages",true),y.getBoolean(base+"coordinates",false)));
+                    y.getBoolean(base+"join-messages",true),y.getBoolean(base+"coordinates",false),y.getBoolean(base+"exclude-monsters",false)));
         }
         state=Map.copyOf(loaded);
     }

@@ -1,5 +1,5 @@
 name: UltimateSettings
-version: 1.0.0
+version: 1.0.1
 main: shop.blinksmp.settings.UltimateSettings
 api-version: '1.21.11'
 description: Personal settings and reduced chunk traffic for UltimateSMP players.

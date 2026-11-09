@@ -11,7 +11,7 @@ public final class PreferenceStoreTest {
         try {
             PreferenceStore store=new PreferenceStore(path);
             check(store.get(one).equals(Preferences.DEFAULT),"New player defaults");
-            Preferences modified=Preferences.DEFAULT.toggle("booster").toggle("rank-tags").toggle("messages");
+            Preferences modified=Preferences.DEFAULT.toggle("booster").toggle("rank-tags").toggle("messages").toggle("exclude-monsters");
             store.put(one,modified); store.put(two,Preferences.DEFAULT.toggle("coordinates"));
             PreferenceStore reloaded=new PreferenceStore(path);
             check(reloaded.get(one).equals(modified),"Player choices must survive restart");
@@ -23,6 +23,12 @@ public final class PreferenceStoreTest {
                 boolean failed=false; try { reloaded.put(one,modified); } catch(java.io.IOException ex) { failed=true; }
                 check(failed && reloaded.get(one).equals(Preferences.DEFAULT),"Failed save cannot apply choices");
             } finally { Files.delete(dir); Files.move(archived,dir); }
+            Files.writeString(path,"players:\n  "+one+":\n    booster: true\n    rank-tags: false\n");
+            PreferenceStore legacy=new PreferenceStore(path);
+            check(legacy.get(one).booster() && !legacy.get(one).rankTags() && !legacy.get(one).excludeMonsters(),"Old data retains existing choices and defaults new option off");
+            Files.writeString(path,"players:\n  "+one+":\n    exclude-monsters: invalid\n");
+            boolean invalidMonster=false;try { new PreferenceStore(path); } catch(Exception ex) { invalidMonster=true; }
+            check(invalidMonster,"Malformed new setting must be rejected");
             Files.writeString(path,"players:\n  "+one+":\n    booster: this-is-not-a-boolean\n");
             boolean rejected=false; try { new PreferenceStore(path); } catch(Exception ex) { rejected=true; }
             check(rejected,"Invalid preference data must be rejected");

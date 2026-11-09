@@ -7,6 +7,8 @@ import org.bukkit.command.*;
 import org.bukkit.entity.*;
 import org.bukkit.event.*;
 import org.bukkit.event.inventory.*;
+import org.bukkit.event.entity.CreatureSpawnEvent;
+import com.destroystokyo.paper.event.entity.PlayerNaturallySpawnCreaturesEvent;
 import org.bukkit.event.player.*;
 import org.bukkit.event.server.*;
 import org.bukkit.inventory.*;
@@ -28,8 +30,11 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
     private int chunkCap;
     private boolean manageBoards;
     private int elapsed;
+    private final Set<UUID> excludingMonsters=new HashSet<>();
+    private record SpawnRange(int blocks,int tick) {}
+    private final Map<UUID,SpawnRange> spawnRanges=new HashMap<>();
     private static final LegacyComponentSerializer LEGACY=LegacyComponentSerializer.legacyAmpersand();
-    private static final Map<Integer,String> SLOTS=Map.of(10,"booster",12,"rank-tags",14,"players",16,"messages",21,"join-messages",23,"coordinates");
+    private static final Map<Integer,String> SLOTS=Map.of(10,"booster",12,"rank-tags",14,"players",16,"messages",21,"join-messages",23,"coordinates",25,"exclude-monsters");
     private static final List<String> RANKS=List.of("OWNER","DEV","ADMIN","MOD","TRIAL_MOD","HELPER","MEMBER");
     private static final Set<String> DIRECT=Set.of("msg","tell","w","whisper","pm","message","emsg","etell","ew");
     private static final class Booster {
@@ -61,7 +66,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
             for(Player target:Bukkit.getOnlinePlayers()) p.showPlayer(this,target);
             if(p.getOpenInventory().getTopInventory().getHolder() instanceof Menu) p.closeInventory();
         }
-        boosts.clear(); boards.clear(); previousBoards.clear(); clicked.clear();
+        boosts.clear(); boards.clear(); previousBoards.clear(); clicked.clear(); excludingMonsters.clear(); spawnRanges.clear();
     }
     // Public bridge methods are thread-safe snapshot reads used by UltimateRanks.
     public boolean showRankTags(UUID id) { return store==null || store.get(id).rankTags(); }
@@ -134,7 +139,10 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
             if(show) viewer.showPlayer(this,target); else viewer.hidePlayer(this,target);
         }
     }
-    private void apply(Player p) { applyBooster(p); visibility(p); rebuildBoard(p); }
+    private void apply(Player p) {
+        if(preferences(p).excludeMonsters()) excludingMonsters.add(p.getUniqueId());else excludingMonsters.remove(p.getUniqueId());
+        applyBooster(p); visibility(p); rebuildBoard(p);
+    }
     private void tick() {
         elapsed++;
         for(Player p:Bukkit.getOnlinePlayers()) {
@@ -167,6 +175,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         inv.setItem(16,item(Material.WRITABLE_BOOK,"Allow Direct Messages",v.messages(),"Allow players to /msg, /tell or /w you.","Custom channels and /reply need their own support."));
         inv.setItem(21,item(Material.OAK_SIGN,"Join / Leave Messages",v.joinMessages(),"Show normal player join and leave notices."));
         inv.setItem(23,item(Material.COMPASS,"Coordinates",v.coordinates(),"Show XYZ coordinates above your hotbar.","May replace another plugin's action bar."));
+        inv.setItem(25,item(Material.ZOMBIE_HEAD,"Exclude Me: Natural Monsters",v.excludeMonsters(),"ON: ignore you as a reason to spawn monsters.","Animals and monster spawners are unchanged.","Other nearby players may still allow monsters.","Does not delete mobs or rewrite global caps."));
         ItemStack reset=new ItemStack(Material.BARRIER); ItemMeta meta=reset.getItemMeta(); meta.displayName(Component.text("Reset to Defaults",NamedTextColor.RED)); reset.setItemMeta(meta); inv.setItem(31,reset);
         p.openInventory(inv);
     }
@@ -177,7 +186,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         if(args.length==2 && args[0].equalsIgnoreCase("toggle") && PreferenceStore.KEYS.contains(args[1].toLowerCase(Locale.ROOT))) {
             toggle(p,args[1].toLowerCase(Locale.ROOT)); return true;
         }
-        say(p,"/settings | /settings toggle <booster|rank-tags|players|messages|join-messages|coordinates> | /settings reset"); return true;
+        say(p,"/settings | /settings toggle <booster|rank-tags|players|messages|join-messages|coordinates|exclude-monsters> | /settings reset"); return true;
     }
     private void toggle(Player p,String key) {
         long now=System.nanoTime(); Long prior=clicked.get(p.getUniqueId());
@@ -186,7 +195,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
     }
     @Override public List<String> onTabComplete(CommandSender s,Command cmd,String alias,String[] args) {
         List<String> list=args.length==1?List.of("toggle","reset"):args.length==2&&args[0].equalsIgnoreCase("toggle")?PreferenceStore.KEYS:List.of();
-        String start=args[args.length-1].toLowerCase(Locale.ROOT); return list.stream().filter(v->v.startsWith(start)).toList();
+        String start=args.length==0?"":args[args.length-1].toLowerCase(Locale.ROOT); return list.stream().filter(v->v.startsWith(start)).toList();
     }
     @EventHandler(priority=EventPriority.HIGHEST) public void click(InventoryClickEvent event) {
         if(!(event.getView().getTopInventory().getHolder() instanceof Menu menu)) return;
@@ -226,13 +235,28 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
     @EventHandler(priority=EventPriority.HIGHEST) public void quit(PlayerQuitEvent e) {
         Player p=e.getPlayer(); Component message=e.quitMessage();
         if(message!=null) { e.quitMessage(null); sendNotice(p,message); }
-        restoreBooster(p); releaseBoard(p); clicked.remove(p.getUniqueId());
+        restoreBooster(p); releaseBoard(p); clicked.remove(p.getUniqueId()); excludingMonsters.remove(p.getUniqueId());spawnRanges.remove(p.getUniqueId());
         for(Scoreboard board:boards.values()) { Team team=board.getEntryTeam(p.getName()); if(team!=null) team.removeEntry(p.getName()); }
     }
     private void sendNotice(Player subject,Component message) {
         Bukkit.getConsoleSender().sendMessage(message);
         for(Player viewer:Bukkit.getOnlinePlayers()) if(preferences(viewer).joinMessages()
                 && (preferences(viewer).players() || viewer==subject) && viewer.canSee(subject)) viewer.sendMessage(message);
+    }
+    @EventHandler(priority=EventPriority.MONITOR) public void spawnRange(PlayerNaturallySpawnCreaturesEvent event) {
+        spawnRanges.put(event.getPlayer().getUniqueId(),new SpawnRange(event.isCancelled()?0:Math.max(0,event.getSpawnRadius())*16,Bukkit.getCurrentTick()));
+    }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void naturalMonster(CreatureSpawnEvent event) {
+        if(excludingMonsters.isEmpty() || event.getSpawnReason()!=CreatureSpawnEvent.SpawnReason.NATURAL || event.getEntity().getSpawnCategory()!=SpawnCategory.MONSTER) return;
+        Location spawn=event.getLocation();List<MonsterSpawnPolicy.Candidate> candidates=new ArrayList<>();int tick=Bukkit.getCurrentTick();
+        for(Player player:spawn.getWorld().getPlayers()) {
+            SpawnRange range=spawnRanges.get(player.getUniqueId());
+            int blocks=range!=null && range.tick()==tick?range.blocks():Math.max(0,Math.min(8,Math.min(player.getViewDistance(),player.getWorld().getSimulationDistance())))*16;
+            Location at=player.getLocation();
+            candidates.add(new MonsterSpawnPolicy.Candidate(at.getX(),at.getY(),at.getZ(),blocks,
+                excludingMonsters.contains(player.getUniqueId()),!player.isDead() && player.getGameMode()!=GameMode.SPECTATOR && player.getAffectsSpawning()));
+        }
+        if(MonsterSpawnPolicy.cancel(true,true,spawn.getX(),spawn.getY(),spawn.getZ(),candidates)) event.setCancelled(true);
     }
     @EventHandler public void world(PlayerChangedWorldEvent e) { apply(e.getPlayer()); }
     @EventHandler public void enabled(PluginEnableEvent e) {
