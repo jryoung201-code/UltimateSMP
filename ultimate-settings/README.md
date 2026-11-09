@@ -7,13 +7,13 @@ Geyser for Bedrock players. No resource pack or client mod is required.
 ## Install
 
 1. Stop the server.
-2. Put UltimateSettings-1.0.0.jar in plugins/.
-3. Replace UltimateRanks-1.0.0.jar with the included UltimateRanks-1.0.1.jar.
-   Keep plugins/UltimateRanks/ and its players.yml. Do not leave both rank JARs.
+2. Replace the previous UltimateSettings JAR with UltimateSettings-1.0.1.jar.
+3. Keep the existing settings/rank data folders and your current UltimateRanks JAR.
+   Rank integration supports UltimateRanks 1.0.1 or newer; do not downgrade it.
 4. Start the server and run `/settings` in game.
 
 The settings plugin also works alone; personal rank display integration requires
-UltimateRanks 1.0.1. Rank data and punishments keep the same file format.
+UltimateRanks 1.0.1 or newer. Rank data and punishments keep the same file format.
 UltimateOptimize can remain installed unchanged.
 
 ## Menu choices
@@ -26,6 +26,7 @@ UltimateOptimize can remain installed unchanged.
 | Allow Direct Messages | ON | Allows incoming common `/msg`, `/tell`, `/w` and similar direct message commands |
 | Join / Leave Messages | ON | Shows ordinary join/leave chat announcements |
 | Coordinates | OFF | Shows your XYZ above the hotbar once per second |
+| Exclude Me: Natural Monsters | OFF | Opt out as a cause of natural monster spawn attempts; animals stay unchanged |
 | Reset to Defaults | — | Restores and saves all six default choices |
 
 Booster is available to Java players too. It sends less terrain, which may help
@@ -93,7 +94,7 @@ Restart after editing config.yml. Do not edit players.yml while the server runs.
 Run `mvn -f ultimate-settings/pom.xml package` with JDK 21. The settings workflow
 builds the JAR and tests defaults, all setting toggles, per-UUID isolation,
 distance caps, persistence/reset, malformed data and failed saves. The ranks
-workflow builds UltimateRanks 1.0.1 and checks authorization/punishment storage.
+workflow builds the current UltimateRanks version and checks authorization/punishment storage.
 No live Paper server or Bedrock client is available in this build environment;
 menu interaction, Geyser rendering and scoreboard integration still need an
 in-game check.
