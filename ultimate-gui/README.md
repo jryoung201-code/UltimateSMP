@@ -6,7 +6,7 @@ UltimateBedrockChat already uses the same dependency; do not add a duplicate JAR
 
 ## Install and preconfigured owner
 
-UltimateBedrockChat 1.0.2 automatically installs this panel, or stages an older
+UltimateBedrockChat 1.0.4 automatically installs this panel, or stages an older
 installed copy through Paper's update folder. Restart once after an installation
 or staged update is reported. You can also manually replace the old GUI JAR with
 UltimateGUI-1.0.2.jar while the server is stopped.
