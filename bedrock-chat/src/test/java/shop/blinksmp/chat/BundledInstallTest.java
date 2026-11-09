@@ -8,7 +8,7 @@ public final class BundledInstallTest {
     public static void main(String[] args) throws Exception {
         Path root=Files.createTempDirectory("bundled-plugins-test-");
         try {
-            check(root,"UltimateGUI","admin",new AdminInstaller.Spec("UltimateGUI","shop.blinksmp.gui.UltimateGUI","1.0.1"));
+            check(root,"UltimateGUI","admin",new AdminInstaller.Spec("UltimateGUI","shop.blinksmp.gui.UltimateGUI","1.0.2"));
             check(root,"PacketEvents","packetevents",new AdminInstaller.Spec("packetevents","io.github.retrooper.packetevents.PacketEventsPlugin","2.14.0"));
             System.out.println("PASS: actual bundled PacketEvents and UltimateGUI install and verify in Java");
         } finally { try(var paths=Files.walk(root)) { for(Path p:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); } }
@@ -25,3 +25,4 @@ public final class BundledInstallTest {
         }
     }
 }
+

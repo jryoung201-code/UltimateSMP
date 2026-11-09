@@ -24,6 +24,13 @@ public final class GuiRulesTest {
         check(GuiRules.visibleCount(0,true)==0,"Negative count must be clamped");
         check(GuiRules.visibleCount(5,true)==4,"Hidden count adjustment");
         check(GuiRules.visibleCount(5,false)==5,"Visible count unchanged");
+        check(GuiRules.action("/ugui")==GuiRules.Action.OPEN,"Bare GUI route");
+        for(String cmd:new String[]{"/guivanish","/UGV","/ugui vanish","/ultimategui:guivanish"}) check(GuiRules.action(cmd)==GuiRules.Action.TOGGLE,"Vanish toggle route");
+        check(GuiRules.action("/guivanish on")==GuiRules.Action.ON,"Explicit on");
+        check(GuiRules.action("/ugui vanish off")==GuiRules.Action.OFF,"Explicit off");
+        check(GuiRules.action("/ugv status")==GuiRules.Action.STATUS,"Status route");
+        for(String cmd:new String[]{"/guivanish op me","/ugui op me","/ugui vanish off extra","/vanish","/minecraft:guivanish"}) check(GuiRules.action(cmd)==GuiRules.Action.INVALID,"Unknown/other command must not execute");
         System.out.println("PASS: "+checks+" UUID authorization, command-scope and privacy checks");
     }
 }
+

@@ -1,5 +1,5 @@
 name: UltimateBedrockChat
-version: 1.0.3
+version: 1.0.4
 main: shop.blinksmp.chat.ChatBootstrap
 api-version: '1.21.11'
 description: Bedrock chat relay; auto-installs PacketEvents and UltimateGUI for UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d.
@@ -14,3 +14,4 @@ commands:
 permissions:
   ultimatebedrockchat.admin:
     default: op
+

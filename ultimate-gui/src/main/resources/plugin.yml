@@ -1,5 +1,5 @@
 name: UltimateGUI
-version: 1.0.1
+version: 1.0.2
 main: shop.blinksmp.gui.UltimateGUI
 api-version: '1.21.11'
 description: A UUID-bound personal admin panel for RealJR_25736.
@@ -7,7 +7,12 @@ author: Aven
 depend: [packetevents]
 softdepend: [UltimateRanks, UltimateSettings]
 commands:
+  guivanish:
+    description: Toggle or inspect the UUID-bound owner vanish
+    aliases: [ugv]
+    usage: /<command> [on|off|status]
   ultimategui:
     description: Open the owner-only panel
     aliases: [ugui]
     usage: /<command>
+

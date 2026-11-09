@@ -1,4 +1,4 @@
-# UltimateRanks 1.0.1
+# UltimateRanks 1.0.2
 
 Standalone Paper 1.21.11 / Java 21 plugin for UltimateSMP. No LuckPerms or client
 mod required. Java and Floodgate Bedrock players use the same rank system.
@@ -7,7 +7,7 @@ above-head nameplates are not modified. PLAYER UUIDs identify ranks and punishme
 
 ## Install and first OWNER
 
-1. Stop the server. Upload UltimateRanks-1.0.1.jar into plugins/ and start it.
+1. Stop the server. Upload UltimateRanks-1.0.2.jar into plugins/ and start it.
 2. Join the server once so your exact name and UUID are recorded.
 3. In the SERVER CONSOLE run `rank set YourExactName OWNER` (without `/`).
 4. In game run `/rank info` and `/staff` to check your rank and available tools.
@@ -55,7 +55,7 @@ command is provided.
 | `/ban <player> [reason]` | Permanent UUID ban |
 | `/unban <player>` | Remove an UltimateRanks ban |
 | `/freeze <player>` | Toggle a session freeze; same/higher issuer can undo it |
-| `/vanish` or `/v` | Toggle hiding from members/helpers; Trial Mods+ can see staff |
+| `/vanish` or `/v` | Toggle hiding from ALL other players, including staff and OPs |
 | `/invsee <player>` | Open a cloned read-only inventory snapshot |
 | `/tp <player>` | Teleport yourself to an online visible player |
 | `/bring <player>` | Teleport a lower-rank player to you |
@@ -95,8 +95,11 @@ while frozen is logged. It is not an anti-cheat or movement-packet filter.
 Vanish is session-only and hides the player entity/tab entry through Paper's
 visibility API. It suppresses public chat while active; use /sc. Building,
 interactions, pickup/drop and dealing/taking damage are blocked while vanished.
-It does not disguise total player counts or guarantee concealment in other
-plugins' web maps, custom lists, proxy lists or messages. No fake join message is
+It removes locally vanished players from the Paper Java ping count/sample and
+filters normal tab completions. It cannot guarantee concealment in independent
+plugins' web maps, custom lists, proxy lists or messages. With UltimateGUI 1.0.2,
+the configured owner's /vanish delegates to the GUI's single persisted state;
+other staff keep session-only rank vanish. Update both plugins together. No fake join message is
 sent when toggling. Spectator mode restores on toggle-off, demotion, logout and
 plugin disable.
 
@@ -119,7 +122,7 @@ Run `mvn -f ultimate-ranks/pom.xml package` from the repository with JDK 21.
 The GitHub Actions ranks workflow compiles the plugin, runs authorization and
 duration checks, and tests data persistence, UUID identity, punishment expiry,
 corrupt-data rejection and failed-save behavior. The final JAR is an Actions
-artifact named UltimateRanks-1.0.1. No live Minecraft/Bedrock client test has
+artifact named UltimateRanks-1.0.2. No live Minecraft/Bedrock client test has
 been performed in this build environment.
 
 ## Personal rank tags with UltimateSettings
@@ -130,3 +133,4 @@ nametags and the tab list when no custom scoreboard is active. It leaves custom
 scoreboards and existing main-scoreboard teams/objectives alone. Those other
 plugins control their own tab/nametag appearance. Without UltimateSettings, the
 original global chat/tab prefixes continue to work. Rank data is unchanged.
+

@@ -16,6 +16,9 @@ import org.bukkit.event.server.*;
 import org.bukkit.inventory.*;
 import org.bukkit.permissions.PermissionAttachment;
 import org.bukkit.plugin.java.JavaPlugin;
+import org.bukkit.metadata.FixedMetadataValue;
+import com.destroystokyo.paper.event.server.PaperServerListPingEvent;
+import com.destroystokyo.paper.event.server.AsyncTabCompleteEvent;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.*;
@@ -64,7 +67,8 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             GameMode previous=spectatorModes.get(p.getUniqueId()); if(previous!=null && p.getGameMode()==GameMode.SPECTATOR) p.setGameMode(previous);
             if(inspections.containsKey(p.getUniqueId())) p.closeInventory();
         }
-        vanished.clear(); frozen.clear(); inspections.clear(); spectatorModes.clear();
+        for(Player p:Bukkit.getOnlinePlayers()) p.removeMetadata("vanished",this);
+        hiddenNames=Set.of();vanished.clear(); frozen.clear(); inspections.clear(); spectatorModes.clear();
     }
 
     private Rank rank(UUID id) { return store.get(id).rank(); }
@@ -141,16 +145,69 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private void updateVisibility(Player viewer) {
         for(UUID id:vanished) {
             Player hidden=Bukkit.getPlayer(id); if(hidden==null || viewer==hidden) continue;
-            if(rank(viewer.getUniqueId()).level>=Rank.TRIAL_MOD.level) viewer.showPlayer(this,hidden);
-            else viewer.hidePlayer(this,hidden);
+            viewer.hidePlayer(this,hidden);
         }
     }
-    private void setVanish(Player p,boolean enabled) {
-        if(enabled) vanished.add(p.getUniqueId()); else vanished.remove(p.getUniqueId());
-        for(Player viewer:Bukkit.getOnlinePlayers()) {
-            if(!enabled) viewer.showPlayer(this,p); else updateVisibility(viewer);
+    private org.bukkit.plugin.Plugin gui() {
+        org.bukkit.plugin.Plugin gui=Bukkit.getPluginManager().getPlugin("UltimateGUI");
+        return gui!=null && gui.isEnabled()?gui:null;
+    }
+    public boolean isLocallyVanished(UUID id) { return vanished.contains(id); }
+    public boolean releaseLocalVanish(UUID id) {
+        boolean changed=vanished.remove(id);Player p=Bukkit.getPlayer(id);
+        if(p!=null) {
+            p.removeMetadata("vanished",this);
+            for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=p) viewer.showPlayer(this,p);
         }
-        say(p,enabled?"&aVanish enabled. Trial Mods and above can still see you.":"&eVanish disabled.");
+        refreshHiddenNames();return changed;
+    }
+    private void setVanish(Player p,boolean enabled) {
+        if(enabled) {
+            vanished.add(p.getUniqueId());p.setMetadata("vanished",new FixedMetadataValue(this,true));
+            for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer);
+            for(Entity e:p.getNearbyEntities(48,48,48)) if(e instanceof Mob mob && p.equals(mob.getTarget())) mob.setTarget(null);
+        } else releaseLocalVanish(p.getUniqueId());
+        refreshHiddenNames();
+        say(p,enabled?"&aVanish enabled. Hidden from all other players, including staff.":"&eVanish disabled.");
+    }
+    private void delayedVisibility() {
+        Bukkit.getScheduler().runTask(this,()-> { for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer); });
+        Bukkit.getScheduler().runTaskLater(this,()-> { for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer); },20);
+    }
+    @EventHandler public void guiEnabled(PluginEnableEvent event) {
+        if(!event.getPlugin().getName().equals("UltimateGUI")) return;
+        for(UUID id:new HashSet<>(vanished)) {
+            Player p=Bukkit.getPlayer(id);if(p==null) continue;
+            try { if(VanishBridge.set(event.getPlugin(),p,true)) releaseLocalVanish(id); }
+            catch(ReflectiveOperationException|RuntimeException ex) { getLogger().warning("Could not connect owner vanish: "+ex); }
+        }
+    }
+    @EventHandler public void visibilityRespawn(PlayerRespawnEvent event) { delayedVisibility(); }
+    @EventHandler public void visibilityWorld(PlayerChangedWorldEvent event) { delayedVisibility(); }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void vanishTarget(EntityTargetLivingEntityEvent event) {
+        if(event.getTarget() instanceof Player p && vanished.contains(p.getUniqueId())) event.setCancelled(true);
+    }
+    @EventHandler(priority=EventPriority.HIGHEST) public void vanishDeath(PlayerDeathEvent event) { if(vanished.contains(event.getEntity().getUniqueId())) event.deathMessage(null); }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void vanishPing(PaperServerListPingEvent event) {
+        if(vanished.isEmpty()) return;
+        int count=0;Set<UUID> ids=new HashSet<>();
+        for(UUID id:vanished) if(Bukkit.getPlayer(id)!=null) { count++;ids.add(id); }
+        event.getListedPlayers().removeIf(info->ids.contains(info.id()));
+        if(!event.shouldHidePlayers()) event.setNumPlayers(Math.max(0,event.getNumPlayers()-count));
+    }
+    private boolean hiddenSuggestion(String suggestion) {
+        if(suggestion==null) return false;
+        for(UUID id:vanished) { Player p=Bukkit.getPlayer(id);if(p!=null && suggestion.toLowerCase(Locale.ROOT).contains(p.getName().toLowerCase(Locale.ROOT))) return true; }
+        return false;
+    }
+    @EventHandler(priority=EventPriority.HIGHEST) public void vanishTab(TabCompleteEvent event) { event.getCompletions().removeIf(this::hiddenSuggestion); }
+    // Async completion reads only an immutable, main-thread-captured name snapshot.
+    private volatile Set<String> hiddenNames=Set.of();
+    private void refreshHiddenNames() {
+        Set<String> names=new HashSet<>();for(UUID id:vanished) { Player p=Bukkit.getPlayer(id);if(p!=null) names.add(p.getName().toLowerCase(Locale.ROOT)); }hiddenNames=Set.copyOf(names);
+    }
+    @EventHandler(priority=EventPriority.HIGHEST) public void vanishAsyncTab(AsyncTabCompleteEvent event) {
+        Set<String> names=hiddenNames;event.completions().removeIf(c->names.stream().anyMatch(n->c.suggestion().toLowerCase(Locale.ROOT).contains(n)));
     }
     private UUID resolve(CommandSender sender,String value) {
         Player online=Bukkit.getPlayerExact(value);
@@ -207,7 +264,11 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
                 for(Player p:Bukkit.getOnlinePlayers()) if(rank(p.getUniqueId()).level>=Rank.HELPER.level) say(p,"&b[Staff] "+s.getName()+": &f"+message);
                 return true;
             }
-            if(action.equals("vanish")) { Player p=self(s); setVanish(p,!vanished.contains(p.getUniqueId())); return true; }
+            if(action.equals("vanish")) {
+                Player p=self(s);
+                if(!VanishBridge.toggle(gui(),p,vanished.contains(p.getUniqueId()))) setVanish(p,!vanished.contains(p.getUniqueId()));
+                return true;
+            }
             if(action.equals("gsp")) {
                 Player p=self(s); require(!frozen.containsKey(p.getUniqueId()),"You are frozen.");
                 if(spectatorModes.containsKey(p.getUniqueId())) p.setGameMode(spectatorModes.remove(p.getUniqueId()));
@@ -285,6 +346,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
                 default -> throw new IllegalArgumentException("Unknown staff command. Use /staff.");
             }
         } catch(IllegalArgumentException|ArithmeticException ex) { say(s,"&c"+ex.getMessage()); }
+        catch(ReflectiveOperationException|IllegalStateException ex) { say(s,"&cCould not change owner vanish. Check /guivanish status and the console.");getLogger().warning(ex.toString()); }
         return true;
     }
     private void teleport(Player moved,Location to,CommandSender sender) {
@@ -322,12 +384,16 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         Sanction ban=store.get(event.getPlayer().getUniqueId()).ban();
         if(ban!=null && ban.active(System.currentTimeMillis())) event.disallow(PlayerLoginEvent.Result.KICK_BANNED,notice("Banned",ban));
     }
-    @EventHandler public void join(PlayerJoinEvent event) { remember(event.getPlayer()); refresh(event.getPlayer()); updateVisibility(event.getPlayer()); }
+    @EventHandler public void join(PlayerJoinEvent event) {
+        Player p=event.getPlayer();remember(p);refresh(p);
+        if(!vanished.contains(p.getUniqueId())) for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=p) viewer.showPlayer(this,p);
+        updateVisibility(p);delayedVisibility();
+    }
     @EventHandler public void quit(PlayerQuitEvent event) {
         UUID id=event.getPlayer().getUniqueId();
         if(vanished.remove(id)) {
             event.quitMessage(null);
-            for(Player viewer:Bukkit.getOnlinePlayers()) viewer.showPlayer(this,event.getPlayer());
+            event.getPlayer().removeMetadata("vanished",this);refreshHiddenNames();
         }
         if(frozen.remove(id)!=null) getLogger().info(event.getPlayer().getName()+" disconnected while frozen.");
         GameMode prior=spectatorModes.remove(id); if(prior!=null && event.getPlayer().getGameMode()==GameMode.SPECTATOR) event.getPlayer().setGameMode(prior);
@@ -406,3 +472,4 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         return candidates.stream().filter(v->v.toLowerCase(Locale.ROOT).startsWith(partial)).sorted().toList();
     }
 }
+

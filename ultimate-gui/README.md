@@ -1,4 +1,4 @@
-# UltimateGUI 1.0.1
+# UltimateGUI 1.0.2
 
 Personal in-game admin panel for RealJR_25736, on Paper 1.21.11 / Java 21.
 Requires the official PacketEvents Spigot plugin, version 2.14.0. Existing
@@ -6,10 +6,10 @@ UltimateBedrockChat already uses the same dependency; do not add a duplicate JAR
 
 ## Install and preconfigured owner
 
-UltimateBedrockChat 1.0.1 automatically installs this panel, or stages an older
+UltimateBedrockChat 1.0.2 automatically installs this panel, or stages an older
 installed copy through Paper's update folder. Restart once after an installation
 or staged update is reported. You can also manually replace the old GUI JAR with
-UltimateGUI-1.0.1.jar while the server is stopped.
+UltimateGUI-1.0.2.jar while the server is stopped.
 
 The sole owner is hardcoded to UUID `bd33980d-5b8d-4f1c-becc-0520f92c4a0d`.
 Open `/ugui` or `/ultimategui` using that account. No console bind is required;
@@ -55,15 +55,23 @@ plugin does not change online-mode or your server's authentication configuration
   interactions and item pickup/drop while hidden. Use /sc for staff chat if your
   rank permits it. Gamemode changes remain available through the panel.
 
-Other plugins' independent vanish settings are not cleared when you turn this
-one off. Disable the previous rank plugin's vanish first if you want one toggle
-to describe all active hiding. Player hide/show calls are scoped to this plugin;
-they cannot unhide someone hidden by another plugin.
+Install UltimateRanks 1.0.2 alongside this update. For the bound owner, its
+`/vanish` command and this GUI share the same persisted owner vanish state.
+Turning owner vanish off also releases UltimateRanks' local hide. Other plugins'
+independent hide states remain scoped to those plugins.
+
+Use `/guivanish` (alias `/ugv`) to toggle directly, or `/guivanish on`, `off`, or
+`status`. `/ugui vanish [on|off|status]` also works. These commands keep the exact
+same UUID authorization as the GUI. Status reports how many OTHER online players
+cannot see you through Bukkit's visibility API; seeing your own model does not
+mean other clients can see you. Join, respawn and world-change events reapply
+visibility immediately and after their event lifecycle. The panel keeps its
+owner-only access and never lets OPs rebind or operate another account.
 
 ## Quiet command scope and logging limits
 
 PacketEvents intercepts ONLY the bound, online owner's GUI command routes
-(`/ultimategui`, `/ugui`, and this plugin's namespaced equivalents) before vanilla
+(`/ultimategui`, `/ugui`, `/guivanish`, `/ugv`, and this plugin's namespaced equivalents) before vanilla
 command dispatch/logging. It opens the panel directly. Every other command stays
 on the normal execution, permission and logging path. It is not a general silent
 command executor. Root commands have no signed chat arguments.
@@ -90,3 +98,4 @@ is available in this build environment.
 
 Official PacketEvents dependency:
 https://github.com/retrooper/packetevents/releases/download/v2.14.0/packetevents-spigot-2.14.0.jar
+

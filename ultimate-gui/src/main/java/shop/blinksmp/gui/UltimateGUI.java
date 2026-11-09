@@ -36,6 +36,7 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
     private volatile String ownerName=GuiRules.OWNER_NAME;
     private PacketListenerAbstract packetListener;
     private Path statePath;
+    private boolean warnedOldRanks;
     private record Session(Player player,UUID id,boolean collidable,boolean affectsSpawning,boolean silent,AtomicBoolean pending) {}
     private static final class Menu implements InventoryHolder {
         final UUID owner; Inventory inventory;
@@ -55,6 +56,7 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
         } catch(Exception ex) { getLogger().severe("Cannot read owner.yml; access disabled and file preserved: "+ex); Bukkit.getPluginManager().disablePlugin(this); return; }
         Bukkit.getPluginManager().registerEvents(this,this);
         Objects.requireNonNull(getCommand("ultimategui")).setTabCompleter(this);
+        Objects.requireNonNull(getCommand("guivanish")).setTabCompleter(this);
         if(ownerId!=null) { Player online=Bukkit.getPlayer(ownerId); if(online!=null) attach(online); }
         packetListener=new PacketListenerAbstract(PacketListenerPriority.HIGHEST) {
             @Override public void onPacketReceive(PacketReceiveEvent event) {
@@ -72,7 +74,7 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
                 // Every other command follows its original permissions, logging and execution path.
                 if(!active.pending().compareAndSet(false,true)) return;
                 try { Bukkit.getScheduler().runTask(UltimateGUI.this,()-> {
-                    try { if(owner==active && active.player().isOnline() && authorized(active.player())) open(active.player()); }
+                    try { if(owner==active && active.player().isOnline() && authorized(active.player())) route(active.player(),text); }
                     finally { active.pending().set(false); }
                 }); } catch(org.bukkit.plugin.IllegalPluginAccessException ex) { active.pending().set(false); }
             }
@@ -88,8 +90,11 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
             for(Player viewer:Bukkit.getOnlinePlayers()) viewer.showPlayer(this,active.player());
             if(active.player().getOpenInventory().getTopInventory().getHolder() instanceof Menu) active.player().closeInventory();
         }
+        for(Player p:Bukkit.getOnlinePlayers()) if(p.getOpenInventory().getTopInventory().getHolder() instanceof Menu) { p.getOpenInventory().getTopInventory().clear();p.closeInventory(); }
         owner=null;
     }
+    public boolean controlsVanish(UUID id) { return GuiRules.allowed(ownerId,id); }
+    public boolean isVanished(UUID id) { return controlsVanish(id) && vanished; }
     private boolean authorized(Player p) { return GuiRules.allowed(ownerId,p.getUniqueId()); }
     private boolean hidden(Player p) { return vanished && GuiRules.allowed(ownerId,p.getUniqueId()); }
     private boolean hiddenOnline() { return vanished && owner!=null; }
@@ -111,24 +116,72 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
         p.setMetadata("vanished",new FixedMetadataValue(this,true));
         p.setCollidable(false); p.setAffectsSpawning(false); p.setSilent(true);
         for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=p) viewer.hidePlayer(this,p);
+        for(Entity entity:p.getNearbyEntities(48,48,48)) if(entity instanceof Mob mob && p.equals(mob.getTarget())) mob.setTarget(null);
     }
     private void restore(Session s) {
         s.player().removeMetadata("vanished",this);
         s.player().setCollidable(s.collidable()); s.player().setAffectsSpawning(s.affectsSpawning()); s.player().setSilent(s.silent());
     }
-    private void toggle(Player p) {
-        if(!authorized(p)) return;
-        boolean next=!vanished;
-        try { save(ownerId,next); }
-        catch(IOException ex) { say(p,"Could not save vanish state; no change applied."); getLogger().severe("Vanish state save failed: "+ex); return; }
-        vanished=next;
-        if(next) { p.closeInventory(); applyHidden(p); }
-        else {
-            Session active=owner; if(active!=null) restore(active);
-            for(Player viewer:Bukkit.getOnlinePlayers()) viewer.showPlayer(this,p);
+    private boolean localRanksHidden(UUID id) {
+        org.bukkit.plugin.Plugin ranks=Bukkit.getPluginManager().getPlugin("UltimateRanks");
+        if(ranks==null || !ranks.isEnabled()) return false;
+        try { return Boolean.TRUE.equals(ranks.getClass().getMethod("isLocallyVanished",UUID.class).invoke(ranks,id)); }
+        catch(ReflectiveOperationException ex) { return false; }
+    }
+    private void releaseRankHide(UUID id) {
+        org.bukkit.plugin.Plugin ranks=Bukkit.getPluginManager().getPlugin("UltimateRanks");
+        if(ranks==null || !ranks.isEnabled()) return;
+        try { ranks.getClass().getMethod("releaseLocalVanish",UUID.class).invoke(ranks,id); }
+        catch(ReflectiveOperationException ex) {
+            if(!warnedOldRanks) { warnedOldRanks=true;getLogger().warning("Upgrade UltimateRanks to 1.0.2 so /vanish and the owner panel share one state."); }
         }
-        say(p,next?"Vanish ON — hidden from all other players, including OPs.":"Vanish OFF.");
-        open(p);
+    }
+    /** Main-thread API used by UltimateRanks; UUID authorization remains enforced here. */
+    public boolean setOwnerVanish(Player p,boolean enabled) {
+        if(!Bukkit.isPrimaryThread() || !p.isOnline() || !authorized(p)) return false;
+        if(owner==null || owner.player()!=p) attach(p);
+        try { save(ownerId,enabled); }
+        catch(IOException ex) { say(p,"Could not save vanish state; no change applied.");getLogger().severe("Vanish state save failed: "+ex);return false; }
+        vanished=enabled;
+        // Establish the GUI hide first before releasing the old rank hide to avoid a visibility gap.
+        if(enabled) applyHidden(p);
+        releaseRankHide(p.getUniqueId());
+        if(!enabled) {
+            Session active=owner;if(active!=null) restore(active);
+            for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=p) viewer.showPlayer(this,p);
+        }
+        say(p,enabled?"Vanish ON — hidden from all other players, including OPs.":"Vanish OFF.");
+        return true;
+    }
+    private void toggle(Player p) {
+        boolean next=!(vanished || localRanksHidden(p.getUniqueId()));
+        if(setOwnerVanish(p,next)) open(p);
+    }
+    private void refreshVisibility() {
+        Session active=owner;if(active==null || !active.player().isOnline()) return;
+        for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=active.player()) {
+            if(vanished) viewer.hidePlayer(this,active.player());else viewer.showPlayer(this,active.player());
+        }
+    }
+    private void delayedVisibility() {
+        Bukkit.getScheduler().runTask(this,()-> { if(isEnabled()) refreshVisibility(); });
+        Bukkit.getScheduler().runTaskLater(this,()-> { if(isEnabled()) refreshVisibility(); },20);
+    }
+    private void route(Player p,String raw) {
+        GuiRules.Action action=GuiRules.action(raw);
+        switch(action) {
+            case OPEN -> open(p);
+            case TOGGLE -> setOwnerVanish(p,!(vanished || localRanksHidden(p.getUniqueId())));
+            case ON -> setOwnerVanish(p,true);
+            case OFF -> setOwnerVanish(p,false);
+            case STATUS -> {
+                long others=Bukkit.getOnlinePlayers().stream().filter(v->v!=p).count();
+                long hiddenCount=Bukkit.getOnlinePlayers().stream().filter(v->v!=p && !v.canSee(p)).count();
+                say(p,"Vanish "+(vanished?"ON":"OFF")+" | hidden from "+hiddenCount+"/"+others+" other online players.");
+                if(localRanksHidden(p.getUniqueId())) say(p,"A rank vanish was also active. /guivanish off clears both.");
+            }
+            case INVALID -> say(p,"Use /ugui or /guivanish [on|off|status]. /ugui vanish [on|off|status] also works.");
+        }
     }
     private ItemStack icon(Material type,String title,String... description) {
         ItemStack item=new ItemStack(type); ItemMeta meta=item.getItemMeta();
@@ -151,9 +204,14 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
             say(s,"Owner UUID is preconfigured: "+ownerId+". No bind step is needed. Console cannot open or rebind this GUI."); return true;
         }
         if(!(s instanceof Player p) || !authorized(p)) { say(s,"Only the bound RealJR_25736 account can use UltimateGUI."); return true; }
-        open(p); return true;
+        route(p,cmd.getName()+" "+String.join(" ",args));return true;
     }
-    @Override public List<String> onTabComplete(CommandSender s,Command cmd,String alias,String[] args) { return List.of(); }
+    @Override public List<String> onTabComplete(CommandSender s,Command cmd,String alias,String[] args) {
+        if(!(s instanceof Player p) || !authorized(p)) return List.of();
+        List<String> choices=cmd.getName().equals("guivanish") && args.length==1?List.of("on","off","status"):args.length==1?List.of("vanish"):args.length==2 && args[0].equalsIgnoreCase("vanish")?List.of("on","off","status"):List.of();
+        String partial=args.length==0?"":args[args.length-1].toLowerCase(Locale.ROOT);
+        return choices.stream().filter(v->v.startsWith(partial)).toList();
+    }
 
     @EventHandler(priority=EventPriority.HIGHEST) public void click(InventoryClickEvent e) {
         if(!(e.getView().getTopInventory().getHolder() instanceof Menu menu)) return;
@@ -173,19 +231,24 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
         Player p=e.getPlayer();
         if(authorized(p)) { attach(p); if(vanished) e.joinMessage(null); }
         Session active=owner; if(vanished && active!=null && p!=active.player()) p.hidePlayer(this,active.player());
+        if(authorized(p) && !vanished) for(Player viewer:Bukkit.getOnlinePlayers()) if(viewer!=p) viewer.showPlayer(this,p);
+        delayedVisibility();
     }
+    @EventHandler public void respawn(PlayerRespawnEvent e) { delayedVisibility(); }
+    @EventHandler public void world(PlayerChangedWorldEvent e) { delayedVisibility(); }
+    @EventHandler(priority=EventPriority.HIGHEST) public void death(PlayerDeathEvent e) { if(hidden(e.getEntity())) e.deathMessage(null); }
     @EventHandler(priority=EventPriority.HIGHEST) public void quietJoin(PlayerJoinEvent e) { if(hidden(e.getPlayer())) e.joinMessage(null); }
     @EventHandler(priority=EventPriority.LOWEST) public void quit(PlayerQuitEvent e) {
         Session active=owner;
         if(active!=null && e.getPlayer()==active.player()) {
             if(vanished) e.quitMessage(null);
-            restore(active); for(Player v:Bukkit.getOnlinePlayers()) v.showPlayer(this,active.player()); owner=null;
+            restore(active);owner=null; // Do not send an add-player packet while a hidden player disconnects.
         }
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void ping(PaperServerListPingEvent e) {
         if(!hiddenOnline()) return;
         UUID id=ownerId; String name=ownerName;
-        e.getListedPlayers().removeIf(p->p.id().equals(id)||p.name().equalsIgnoreCase(name));
+        e.getListedPlayers().removeIf(p->id.equals(p.id())||(p.name()!=null && p.name().equalsIgnoreCase(name)));
         if(!e.shouldHidePlayers()) e.setNumPlayers(GuiRules.visibleCount(e.getNumPlayers(),true));
     }
     @EventHandler(priority=EventPriority.HIGHEST) public void tab(TabCompleteEvent e) {
@@ -240,3 +303,4 @@ public final class UltimateGUI extends JavaPlugin implements Listener,TabComplet
     @EventHandler(priority=EventPriority.HIGHEST) public void pickup(EntityPickupItemEvent e) { if(e.getEntity() instanceof Player p && hidden(p)) e.setCancelled(true); }
     @EventHandler(priority=EventPriority.HIGHEST) public void drop(PlayerDropItemEvent e) { if(hidden(e.getPlayer())) e.setCancelled(true); }
 }
+

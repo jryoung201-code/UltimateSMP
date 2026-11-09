@@ -25,7 +25,7 @@ public final class ChatBootstrap extends JavaPlugin implements Listener {
         if(getConfig().getBoolean("auto-install-admin",true)) {
             getLogger().info("Bundled admin panel owner: bd33980d-5b8d-4f1c-becc-0520f92c4a0d (RealJR_25736).");
             install("UltimateGUI","bundled/UltimateGUI.jar","bundled/admin.properties",
-                    new AdminInstaller.Spec("UltimateGUI","shop.blinksmp.gui.UltimateGUI","1.0.1"));
+                    new AdminInstaller.Spec("UltimateGUI","shop.blinksmp.gui.UltimateGUI","1.0.2"));
         }
         Plugin packets=Bukkit.getPluginManager().getPlugin("packetevents");
         if(packetRestart || packets==null || !packets.isEnabled()) {
@@ -63,8 +63,9 @@ public final class ChatBootstrap extends JavaPlugin implements Listener {
     @Override public void onDisable() { if(relay!=null) { relay.stop(); relay=null; } }
     @Override public boolean onCommand(CommandSender sender,Command cmd,String label,String[] args) {
         if(!sender.hasPermission("ultimatebedrockchat.admin")) { sender.sendMessage("You do not have permission."); return true; }
-        sender.sendMessage("UltimateBedrockChat 1.0.3 | "+status);
+        sender.sendMessage("UltimateBedrockChat 1.0.4 | "+status);
         if(relay!=null) relay.status(sender);
         return true;
     }
 }
+

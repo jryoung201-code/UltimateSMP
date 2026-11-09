@@ -41,6 +41,7 @@ jobs:
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.chat.BootstrapLoadTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateBedrockChat-1.0.3
-          path: bedrock-chat/target/UltimateBedrockChat-1.0.3.jar
+          name: UltimateBedrockChat-1.0.4
+          path: bedrock-chat/target/UltimateBedrockChat-1.0.4.jar
           if-no-files-found: error
+

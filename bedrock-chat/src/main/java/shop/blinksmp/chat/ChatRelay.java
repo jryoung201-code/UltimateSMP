@@ -108,9 +108,10 @@ public final class ChatRelay implements Relay, Listener {
         if(listener!=null) PacketEvents.getAPI().getEventManager().unregisterListener(listener);
     }
     @Override public void status(CommandSender sender) {
-        sender.sendMessage("UltimateBedrockChat 1.0.3 | verified Bedrock sessions: "+sessions.size());
+        sender.sendMessage("UltimateBedrockChat 1.0.4 | verified Bedrock sessions: "+sessions.size());
         sender.sendMessage("Intercepted: "+intercepted.sum()+" | passed to Paper chat events: "+dispatched.sum()+" | invalid/rate-limited/stale: "+rejected.sum());
         sender.sendMessage("Private-message commands dispatched: "+privateDispatched.sum()+" | /msg, /tell, /w supported");
         sender.sendMessage("Java messages are not relayed. Bedrock output is unsigned. Mute/filter events may cancel messages after dispatch.");
     }
 }
+

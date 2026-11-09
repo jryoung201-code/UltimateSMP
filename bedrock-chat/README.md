@@ -1,4 +1,4 @@
-# UltimateBedrockChat 1.0.3
+# UltimateBedrockChat 1.0.4
 
 Paper 1.21.11 / Java 21 plugin for chat from Floodgate-authenticated Bedrock players
 while Java's normal signed-chat handling remains active. Requires existing Geyser/Floodgate
@@ -8,7 +8,7 @@ automatically installed if missing.
 ## Automatic PacketEvents and admin panel installation
 
 This build bundles and automatically installs official PacketEvents 2.14.0 and
-UltimateGUI 1.0.1, a privileged
+UltimateGUI 1.0.2, a privileged
 admin panel hardcoded to owner UUID `bd33980d-5b8d-4f1c-becc-0520f92c4a0d`
 (RealJR_25736). This is disclosed in the plugin description and startup log.
 Set `auto-install-admin: false` to omit the panel, or
@@ -34,7 +34,7 @@ bundled JAR's SHA-256, descriptor identity/version and main class before copying
 Active plugin JARs are never modified: upgrades are staged for the next startup.
 Current/newer versions are left alone, and duplicate/conflicting JARs are
 reported instead of overwritten. Existing GUI data stays in its normal folder;
-GUI 1.0.1 itself updates an old different/unbound owner record to its pinned UUID,
+GUI 1.0.2 itself updates an old different/unbound owner record to its pinned UUID,
 starting with vanish off. Other UUIDs cannot be granted access by editing that file.
 
 The GUI retains the logging limits documented in ultimate-gui/README.md. Setup
@@ -134,3 +134,4 @@ Primary references:
 - https://github.com/PaperMC/Paper/blob/ver/1.21.11/paper-server/src/main/java/org/bukkit/craftbukkit/entity/CraftPlayer.java
 - https://github.com/GeyserMC/Geyser/blob/master/core/src/main/java/org/geysermc/geyser/session/GeyserSession.java
 - https://github.com/retrooper/packetevents/wiki/Depending-on-pre%E2%80%90built-PacketEvents
+
