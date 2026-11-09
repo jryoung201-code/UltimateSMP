@@ -1,0 +1,33 @@
+name: Build UltimateHomes
+on:
+  push:
+    paths: ['ultimate-homes/**', '.github/workflows/homes.yml']
+  pull_request:
+    paths: ['ultimate-homes/**', '.github/workflows/homes.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ultimate-homes
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and package
+        run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+      - name: Verify limits and persistence
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.homes.HomeLimitsTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.homes.HomeStoreTest
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateHomes-1.0.0
+          path: ultimate-homes/target/UltimateHomes-1.0.0.jar
+          if-no-files-found: error
