@@ -40,10 +40,12 @@ Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neo
 6. Configure the same database/branch in both backends and the proxy. Recommended environment variables:
 
    ```text
-   BLINK_NETWORK_JDBC_URL=jdbc:postgresql://NEON_HOST/DATABASE?sslmode=verify-full
+   BLINK_NETWORK_JDBC_URL=jdbc:postgresql://NEON_HOST/DATABASE?sslmode=require&channelBinding=require
    BLINK_NETWORK_DB_USER=ROLE
    BLINK_NETWORK_DB_PASSWORD=PASSWORD
    ```
+
+   Use the Java connection parameters from Neon's Connect dialog; its current example uses `sslmode=require&channelBinding=require`. The optional `verify-full` example in the generated config requires a configured trusted root certificate or an appropriate Java SSL factory. See https://neon.com/docs/guides/java.
 
    Alternatively use private config fields (never commit passwords). A normal `postgresql://user:password@...` URL is NOT JDBC syntax; split its credentials into the separate fields. The runtime can use a pooled Neon endpoint; use a direct URL for migrations. All copies must use the same logical database and schema. Do not reuse a backup plugin that independently loads inventories on join.
 7. Set distinct backend `server-id`, matching `world`, `proxy-security-configured: true`, and `enabled: true`. Set `import-local-players: true` ONLY on `BlinkSMP-Overworld-01` while intentionally importing local data. Unknown player records cannot bootstrap elsewhere. On the proxy set `enabled=true`, the same JDBC fields and `bootstrap-server=BlinkSMP-Overworld-01` in `plugins/blinknetwork/network.properties`.
