@@ -1,0 +1,21 @@
+# Install on every Paper backend, NOT on Velocity. Requires Java 21 / Paper 1.21.11.
+# Run once to create this file, configure, then fully restart. No /reload support.
+enabled: false
+server-id: BlinkSMP-Overworld-01
+# Local Bukkit world for THIS server's assigned dimension.
+world: world
+bootstrap-server: BlinkSMP-Overworld-01
+# Enable only on the bootstrap server when deliberately importing local player data.
+import-local-players: false
+# Explicitly confirm Velocity modern forwarding and firewall/secret are configured.
+proxy-security-configured: false
+# Also set allow-nether=false / allow-end=false as appropriate for unused local worlds.
+# Use JDBC syntax; credentials can instead be read from environment variables below.
+database:
+  jdbc-url: ''
+  username: ''
+  password: ''
+# Environment variables take precedence:
+# BLINK_NETWORK_JDBC_URL=jdbc:postgresql://HOST/DATABASE?sslmode=verify-full
+# BLINK_NETWORK_DB_USER=ROLE
+# BLINK_NETWORK_DB_PASSWORD=PASSWORD
