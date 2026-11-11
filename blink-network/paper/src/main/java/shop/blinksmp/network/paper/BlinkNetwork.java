@@ -173,6 +173,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         }catch(Exception ex){s.frozen=false;s.transferring=false;problem("Transfer rejected",ex);}
     }
     private void cancel(Player p,Session s,UUID ticket){
+        if(!Bukkit.isPrimaryThread()){main(()->cancel(p,s,ticket));return;}
         if(!ticket.equals(s.ticket))return;
         boolean connected=p.isOnline();
         io.execute(()->{
@@ -213,6 +214,8 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interactEntity(PlayerInteractEntityEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void breaking(BlockBreakEvent e){if(blocked(e.getPlayer())||!owned(e.getBlock().getLocation()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void placing(BlockPlaceEvent e){if(blocked(e.getPlayer())||!owned(e.getBlock().getLocation()))e.setCancelled(true);}
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void hunger(FoodLevelChangeEvent e){if(e.getEntity() instanceof Player p&&blocked(p))e.setCancelled(true);}
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void held(PlayerItemHeldEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void swap(PlayerSwapHandItemsEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void consume(PlayerItemConsumeEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void command(PlayerCommandPreprocessEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
