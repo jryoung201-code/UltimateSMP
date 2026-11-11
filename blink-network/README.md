@@ -84,4 +84,4 @@ See WEBSITE-INTEGRATION.md. No website code was changed by this plugin release, 
 
 `mvn -B -ntp -f blink-network/pom.xml verify`
 
-CI uses Java 21 and an isolated PostgreSQL 16 service. Policy tests cover floor boundaries, strict IDs, malformed tickets and routing. DB tests exercise real handoffs, concurrent claims, fencing, rollback, unavailable destinations, recovery and immutable initial assignments. Without `TEST_JDBC_URL`, DB integration tests are explicitly skipped; CI always supplies it.
+CI uses Java 21 and an isolated PostgreSQL 16 service. Policy tests cover floor boundaries, strict IDs, malformed tickets and routing. DB tests exercise real handoffs, concurrent claims, fencing, rollback, unavailable destinations, recovery, empty-login cleanup, payload bounds and immutable initial assignments. Without `TEST_JDBC_URL`, DB integration tests are explicitly skipped; CI always supplies it.

@@ -35,8 +35,8 @@ public final class BlinkNetworkProxy {
         }catch(Exception ex){active=true;log.error("BlinkNetwork setup failed ({}); connections blocked.",ex.getClass().getSimpleName());}
     }
     private static String env(String name,Properties p,String key){return System.getenv().getOrDefault(name,p.getProperty(key,""));}
-    @Subscribe public EventTask preconnect(ServerPreConnectEvent event){
-        if(!active)return null;
+    @Subscribe(order=PostOrder.LAST) public EventTask preconnect(ServerPreConnectEvent event){
+        if(!active||event.getResult().getServer().isEmpty())return null;
         return EventTask.async(()->{
             if(!ready){event.setResult(ServerPreConnectEvent.ServerResult.denied());event.getPlayer().disconnect(Component.text("BlinkSMP network is not ready."));return;}
             try {

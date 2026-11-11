@@ -45,4 +45,16 @@ class DatabaseTest {
     @Test void manualRecoveryRetainsLastCommittedSource()throws Exception{
         UUID p=UUID.randomUUID(),s=UUID.randomUUID();db.claim(p,A,s,true);db.prepare(p,s,B,UUID.randomUUID(),new byte[]{4},new byte[]{5});db.recover(p);assertArrayEquals(new byte[]{4},db.claim(p,A,UUID.randomUUID(),false));
     }
+    @Test void rejectedFirstLoginCanReleaseOnlyItsOwnEmptyClaim()throws Exception{
+        UUID p=UUID.randomUUID(),s=UUID.randomUUID();assertNull(db.claim(p,A,s,true));
+        db.abandonEmpty(p,UUID.randomUUID());assertEquals("active",db.route(p).state());
+        db.abandonEmpty(p,s);assertEquals("offline",db.route(p).state());
+        UUID next=UUID.randomUUID();assertNull(db.claim(p,A,next,false));db.save(p,next,new byte[]{7},false);
+        db.abandonEmpty(p,next);assertEquals("active",db.route(p).state());
+    }
+    @Test void payloadBoundsRejectedBeforeWriting()throws Exception{
+        UUID p=UUID.randomUUID(),s=UUID.randomUUID();db.claim(p,A,s,true);
+        assertThrows(IllegalArgumentException.class,()->db.save(p,s,new byte[2097153],false));
+        assertThrows(IllegalArgumentException.class,()->db.save(p,s,null,false));
+    }
 }

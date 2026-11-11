@@ -67,7 +67,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private void problem(String context,Exception e){getLogger().severe(context+" ("+e.getClass().getSimpleName()+"). See setup/troubleshooting documentation; credentials are not logged.");}
     private boolean blocked(Player p){Session s=sessions.get(p.getUniqueId());return active&&(s==null||s.frozen);}
     @EventHandler(priority=EventPriority.LOWEST) public void prelogin(AsyncPlayerPreLoginEvent e){
-        if(!active)return;
+        if(!active||e.getLoginResult()!=AsyncPlayerPreLoginEvent.Result.ALLOWED)return;
         if(!ready){e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,"Network is not ready. Please contact staff.");return;}
         Session s=new Session();
         if(sessions.putIfAbsent(e.getUniqueId(),s)!=null){e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,"Your previous session is still closing.");return;}
@@ -174,24 +174,35 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     }
     private void cancel(Player p,Session s,UUID ticket){
         if(!ticket.equals(s.ticket))return;
+        boolean connected=p.isOnline();
         io.execute(()->{
             try {
-                boolean released=db.cancel(p.getUniqueId(),s.token,ticket,!p.isOnline());
-                if(!released){NetworkStore.Route route=db.route(p.getUniqueId());
-                    if(route!=null&&route.state().equals("active")&&id.equals(route.owner())&&!s.closed){released=true;}
-                }
+                boolean released=db.cancel(p.getUniqueId(),s.token,ticket,!connected);
+                if(!released)released=db.save(p.getUniqueId(),s.token,s.data,!connected); // Exact-session fence, including failed preparation.
+
                 boolean owns=released;
                 main(()->{if(!ticket.equals(s.ticket))return;s.ticket=null;s.transferring=false;
                     if(p.isOnline()&&sessions.get(p.getUniqueId())==s){if(owns){s.frozen=false;p.sendMessage("Transfer did not complete; you remain on this server.");}else p.kickPlayer("Transfer state changed. Please reconnect.");}
+                    else if(owns)io.execute(()->{try{db.save(p.getUniqueId(),s.token,s.data,true);}catch(Exception ex){problem("Disconnected handoff cleanup retained lock",ex);}});
                 });
             }catch(Exception ex){problem("Transfer rollback uncertain; lock retained",ex);main(()->p.kickPlayer("Transfer could not be verified. Contact staff."));}
         });
+    }
+    @EventHandler(priority=EventPriority.MONITOR) public void death(PlayerDeathEvent e){
+        if(!active)return;Player p=e.getEntity();Session s=sessions.get(p.getUniqueId());if(s==null||!s.loaded||s.transferring)return;
+        main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s&&!s.frozen){
+            try{PlayerSnapshot snapshot=PlayerSnapshot.capture(p,dimension,p.getLocation());
+                if(!e.getKeepLevel()){snapshot.yaml.set("level",e.getNewLevel());snapshot.yaml.set("exp",0.0);snapshot.yaml.set("total-exp",e.getNewTotalExp());}
+                s.data=snapshot.bytes();byte[] bytes=s.data;
+                io.execute(()->{try{if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException();}catch(Exception ex){problem("Death checkpoint failed",ex);main(()->p.kickPlayer("Network save failed. Contact staff before reconnecting."));}});
+            }catch(Exception ex){problem("Death snapshot failed",ex);p.kickPlayer("Network state needs staff attention.");}
+        }});
     }
     @EventHandler(priority=EventPriority.MONITOR) public void quit(PlayerQuitEvent e){
         Session s=sessions.remove(e.getPlayer().getUniqueId());if(s==null)return;s.closed=true;
         if(s.transferring)return; // Destination owns the prepared snapshot. Never overwrite it on quit.
         if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
-        byte[] bytes=s.data;if(bytes!=null)io.execute(()->{try{db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
+        byte[] bytes=s.data;io.execute(()->{try{if(bytes==null)db.abandonEmpty(e.getPlayer().getUniqueId(),s.token);else db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void click(InventoryClickEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void drag(InventoryDragEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
@@ -228,6 +239,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(db!=null)for(Player p:Bukkit.getOnlinePlayers()){
             Session s=sessions.remove(p.getUniqueId());if(s==null||s.transferring)continue;
             if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();}catch(Exception ignored){}
+            p.kickPlayer("BlinkSMP network is shutting down. Please reconnect shortly.");
             byte[] data=s.data;if(data!=null)io.execute(()->{try{db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
         }
         io.shutdown();try{if(!io.awaitTermination(20,TimeUnit.SECONDS))getLogger().severe("Shutdown persistence timed out; retained locks may need recovery.");}catch(InterruptedException ex){Thread.currentThread().interrupt();}
