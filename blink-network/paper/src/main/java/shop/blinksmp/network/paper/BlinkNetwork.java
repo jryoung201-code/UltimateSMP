@@ -165,6 +165,13 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             if(profiles.includes(kind))result.put(kind,ProfileSync.bytes(profiles.capture(p.getUniqueId(),kind)));
         return Map.copyOf(result);
     }
+    /** While a live remote rank/sanction is being applied, never persist a stale local copy on disconnect. */
+    private static Map<String,byte[]> safeDisconnectModules(Session s,Map<String,byte[]> captured){
+        if(!s.profileRefreshing)return captured;
+        Map<String,byte[]> safe=new LinkedHashMap<>(captured);
+        safe.remove("ranks");safe.remove("sanctions");
+        return Map.copyOf(safe);
+    }
     private void persistProfiles(UUID player,Session s,Map<String,byte[]> updated) throws Exception {
         for(var row:updated.entrySet()) {
             byte[] previous=s.profileBaseline.get(row.getKey());
@@ -347,7 +354,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Session s=sessions.remove(e.getPlayer().getUniqueId());if(s==null)return;s.closed=true;
         if(s.transferring)return; // Destination owns the prepared snapshot. Never overwrite it on quit.
         Map<String,byte[]> modules=Map.of();
-        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();modules=captureProfiles(e.getPlayer());}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
+        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();modules=safeDisconnectModules(s,captureProfiles(e.getPlayer()));}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
         byte[] bytes=s.data;Map<String,byte[]> savedModules=modules;io.execute(()->{try{persistProfiles(e.getPlayer().getUniqueId(),s,savedModules);if(bytes==null)db.abandonEmpty(e.getPlayer().getUniqueId(),s.token);else db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void click(InventoryClickEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
@@ -387,7 +394,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(db!=null)for(Player p:Bukkit.getOnlinePlayers()){
             Session s=sessions.remove(p.getUniqueId());if(s==null||s.transferring)continue;
             Map<String,byte[]> modules=Map.of();
-            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();modules=captureProfiles(p);}catch(Exception ignored){}
+            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();modules=safeDisconnectModules(s,captureProfiles(p));}catch(Exception ignored){}
             p.kickPlayer("BlinkSMP network is shutting down. Please reconnect shortly.");
             byte[] data=s.data;Map<String,byte[]> savedModules=modules;if(data!=null)io.execute(()->{try{persistProfiles(p.getUniqueId(),s,savedModules);db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
         }
