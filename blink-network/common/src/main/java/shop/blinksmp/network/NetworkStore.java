@@ -100,6 +100,13 @@ public final class NetworkStore implements AutoCloseable {
             double radius=sizeBlocks/2.0;
             return Math.abs(x-centerX)<radius&&Math.abs(z-centerZ)<radius;
         }
+        public boolean containsRegion(Region region) {
+            if(!enabled)return true;
+            if(!dimension.equals(region.dimension()))return false;
+            double half=sizeBlocks/2.0;
+            return region.x()*144.0>=centerX-half&&(region.x()+1)*144.0<=centerX+half
+                &&region.z()*144.0>=centerZ-half&&(region.z()+1)*144.0<=centerZ+half;
+        }
     }
     public Map<String,Border> borders() throws SQLException {
         Map<String,Border> result=new HashMap<>();
@@ -116,6 +123,8 @@ public final class NetworkStore implements AutoCloseable {
     /** Only initial assignment. Reassignment requires actual chunk migration; never upsert ownership. */
     public void assign(Region region,String server) throws SQLException {
         if(!region.dimension().equals(Region.dimensionOf(server)))throw new IllegalArgumentException("Dimension mismatch");
+        Border border=borders().get(region.dimension());
+        if(border!=null&&!border.containsRegion(region))throw new SQLException("Region is outside the configured world border");
         try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement("INSERT INTO "+S+"regions(dimension,region_x,region_z,server_id) VALUES(?,?,?,?)")){s.setString(1,region.dimension());s.setInt(2,region.x());s.setInt(3,region.z());s.setString(4,server);s.executeUpdate();}
     }
     public Route route(UUID id) throws SQLException {
