@@ -181,9 +181,14 @@ public final class NetworkStore implements AutoCloseable {
                     boolean offline=r.getString(1).equals("offline");
                     boolean allowed=(offline&&server.equals(r.getString(2)))||(r.getString(1).equals("handoff")&&server.equals(r.getString(3)));
                     if(offline&&data!=null) {
-                        // Regardless of the last backend, the saved coordinate owner must be authoritative.
-                        String owner=ownerOf(c,regionFromSnapshot(data));
-                        allowed=server.equals(owner);
+                        // Native snapshots route by their stored coordinates. Legacy unreadable
+                        // snapshots may still be claimed only on their original backend.
+                        try {
+                            String owner=ownerOf(c,regionFromSnapshot(data));
+                            allowed=server.equals(owner);
+                        }catch(SQLException malformed) {
+                            if(!server.equals(r.getString(2)))throw malformed;
+                        }
                     }
                     if(!allowed)throw new SQLException("Player state is held by another session/server or saved region is unassigned");
                 }
