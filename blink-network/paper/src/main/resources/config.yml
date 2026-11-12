@@ -34,3 +34,15 @@ profile-sync:
   advancements: false
   statistics: true
 # Advancements are off by default: Bukkit criterion grants can trigger rewards.
+
+# A private, non-blocking particle wall at the edge of your own server's regions.
+# Cyan: another server. Red: unassigned region. Nothing is placed in the world.
+particle-border:
+  enabled: true
+  interval-ticks: 10
+  distance: 24
+  horizontal-spacing: 3
+  vertical-spacing: 2
+  height: 8
+  server-color: '#33CCFF'
+  unassigned-color: '#FF5555'

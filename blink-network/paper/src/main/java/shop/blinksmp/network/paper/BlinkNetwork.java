@@ -31,10 +31,11 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private ProfileSync profiles;
     private boolean seedProfiles;
     private String id,dimension,bootstrap;private World world;private boolean importing;
+    private TerritoryBorderParticles particleBorders;
     private static final class Session {
         final UUID token=UUID.randomUUID();volatile byte[] data;
         volatile boolean frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
-        volatile UUID ticket;volatile long freezeAt=System.currentTimeMillis();
+        volatile UUID ticket;volatile String transferTarget;volatile long freezeAt=System.currentTimeMillis();
         volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
         // Owned by the serialized I/O queue after the async prelogin claim.
         final Map<String,Long> profileVersions=new HashMap<>();
@@ -50,6 +51,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             id=getConfig().getString("server-id");dimension=Region.dimensionOf(id);bootstrap=getConfig().getString("bootstrap-server");Region.dimensionOf(bootstrap);
             importing=getConfig().getBoolean("import-local-players")&&id.equals(bootstrap);
             world=Objects.requireNonNull(Bukkit.getWorld(getConfig().getString("world")),"Configured world does not exist");
+            particleBorders=new TerritoryBorderParticles(getConfig());
             World.Environment expected=switch(dimension){case "Nether"->World.Environment.NETHER;case "End"->World.Environment.THE_END;default->World.Environment.NORMAL;};
             if(world.getEnvironment()!=expected)throw new IllegalArgumentException("World environment does not match server ID");
             db=new NetworkStore(env("BLINK_NETWORK_JDBC_URL","database.jdbc-url"),env("BLINK_NETWORK_DB_USER","database.username"),env("BLINK_NETWORK_DB_PASSWORD","database.password"));
@@ -79,6 +81,20 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             },100,100);
             Bukkit.getScheduler().runTaskTimer(this,()->{if(ready)for(Player p:Bukkit.getOnlinePlayers()){Session s=sessions.get(p.getUniqueId());if(s!=null&&s.loaded&&!s.frozen&&!s.saving&&!s.transferring&&!s.profileRefreshing&&!p.isDead())checkpoint(p,s);}},600,600);
             Bukkit.getScheduler().runTaskTimer(this,()->{if(ready&&profiles.active())pollProfileChanges();},100,100);
+            // Particle borders are private to nearby players and never change blocks.
+            if(particleBorders.enabled()){
+                int period=Math.max(5,Math.min(100,getConfig().getInt("particle-border.interval-ticks",10)));
+                Bukkit.getScheduler().runTaskTimer(this,()->{
+                    if(!ready)return;
+                    Map<Region,String> current=regions;
+                    for(Player player:Bukkit.getOnlinePlayers()){
+                        Session session=sessions.get(player.getUniqueId());
+                        if(session==null||!session.loaded||session.frozen||session.transferring||player.getWorld()!=world)continue;
+                        if(!id.equals(current.get(Region.at(dimension,player.getX(),player.getZ()))))continue;
+                        particleBorders.show(player,current,id,dimension);
+                    }
+                },period,period);
+            }
         }catch(Exception e){problem("Invalid setup; joins blocked until corrected and restarted",e);}
     }
     private String env(String key,String fallback){return System.getenv().getOrDefault(key,getConfig().getString(fallback,""));}
@@ -341,7 +357,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(p.getOpenInventory().getTopInventory().getType()!=InventoryType.CRAFTING){p.sendActionBar("Close your inventory before crossing.");return;}
         if(!p.getItemOnCursor().isEmpty()||Arrays.stream(p.getOpenInventory().getTopInventory().getContents()).anyMatch(item->item!=null&&!item.isEmpty())){p.sendActionBar("Empty your cursor and crafting grid before crossing.");return;}
         try {
-            s.frozen=true;s.freezeAt=System.currentTimeMillis();s.transferring=true;s.ticket=UUID.randomUUID();
+            s.frozen=true;s.freezeAt=System.currentTimeMillis();s.transferring=true;s.ticket=UUID.randomUUID();s.transferTarget=target;
             byte[] source=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();
             byte[] destination=PlayerSnapshot.capture(p,destDimension,dest).bytes();s.data=source;
             Map<String,byte[]> modules=captureProfiles(p);
@@ -365,9 +381,25 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 boolean released=db.cancel(p.getUniqueId(),s.token,ticket,!connected);
                 if(!released)released=db.save(p.getUniqueId(),s.token,s.data,!connected); // Exact-session fence, including failed preparation.
 
+                // The target may have claimed the session before the source timeout fired.
+                // Never kick the source or overwrite the authoritative destination snapshot.
+                NetworkStore.Route route=released?null:db.route(p.getUniqueId());
+                boolean destinationClaimed=route!=null&&route.destinationHasState(s.transferTarget);
+                if(destinationClaimed){
+                    getLogger().info("Destination "+s.transferTarget+" has claimed the transfer; source leaves its session untouched.");
+                    main(()->{
+                        if(!ticket.equals(s.ticket))return;
+                        s.ticket=null;
+                        s.freezeAt=System.currentTimeMillis();
+                        // Still frozen and transferring until Velocity drops the source.
+                        if(p.isOnline()&&sessions.get(p.getUniqueId())==s)
+                            p.sendMessage("Destination received your data; completing transfer.");
+                    });
+                    return;
+                }
                 boolean owns=released;
-                main(()->{if(!ticket.equals(s.ticket))return;s.ticket=null;s.transferring=false;
-                    if(p.isOnline()&&sessions.get(p.getUniqueId())==s){if(owns){s.frozen=false;p.sendMessage("Transfer did not complete; you remain on this server.");}else p.kickPlayer("Transfer state changed. Please reconnect.");}
+                main(()->{if(!ticket.equals(s.ticket))return;s.ticket=null;s.transferring=false;s.transferTarget=null;
+                    if(p.isOnline()&&sessions.get(p.getUniqueId())==s){if(owns){s.frozen=false;p.sendMessage("Transfer did not complete; you remain on this server.");}else p.kickPlayer("Transfer could not be verified. Please reconnect.");}
                     else if(owns)io.execute(()->{try{db.save(p.getUniqueId(),s.token,s.data,true);}catch(Exception ex){problem("Disconnected handoff cleanup retained lock",ex);}});
                 });
             }catch(Exception ex){problem("Transfer rollback uncertain; lock retained",ex);main(()->p.kickPlayer("Transfer could not be verified. Contact staff."));}
@@ -406,7 +438,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void command(PlayerCommandPreprocessEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void chat(AsyncChatEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.1: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.3: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         String[] a=args.clone();io.execute(()->{try{

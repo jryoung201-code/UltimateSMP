@@ -12,6 +12,11 @@ public final class NetworkStore implements AutoCloseable {
     public record Route(String state,String last,String owner,String target,UUID ticket) {
         public String loginServer(){return state.equals("handoff")?target:last;}
         public boolean permits(String from,String to) {return state.equals("handoff") && Objects.equals(owner,from)&&Objects.equals(target,to);}
+        /** The target has legitimately claimed (or already saved) this handoff. Never let the old backend overwrite it. */
+        public boolean destinationHasState(String server) {
+            return server != null && (("active".equals(state) && server.equals(owner))
+                || ("offline".equals(state) && server.equals(last)));
+        }
     }
 
     public static final Set<String> PROFILE_KINDS=Set.of("ranks","sanctions","homes","settings","advancements","statistics");
