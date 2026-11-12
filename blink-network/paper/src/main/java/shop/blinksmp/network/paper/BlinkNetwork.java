@@ -27,6 +27,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private volatile boolean ready,active,stopping;
     private NetworkStore db;
     private ProfileSync profiles;
+    private boolean seedProfiles;
     private String id,dimension,bootstrap;private World world;private boolean importing;
     private static final class Session {
         final UUID token=UUID.randomUUID();volatile byte[] data;
@@ -51,6 +52,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             if(world.getEnvironment()!=expected)throw new IllegalArgumentException("World environment does not match server ID");
             db=new NetworkStore(env("BLINK_NETWORK_JDBC_URL","database.jdbc-url"),env("BLINK_NETWORK_DB_USER","database.username"),env("BLINK_NETWORK_DB_PASSWORD","database.password"));
             profiles=new ProfileSync(this);
+            seedProfiles=profiles.active()&&id.equals(bootstrap)&&getConfig().getBoolean("profile-sync.seed-missing-from-local",false);
             getServer().getMessenger().registerOutgoingPluginChannel(this,Protocol.CHANNEL);
             io.execute(()->{try{db.verify();db.register(id);if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");refresh();ready=true;}catch(Exception e){problem("Startup failed; joins blocked",e);}});
             Bukkit.getScheduler().runTaskTimer(this,()->{
@@ -91,7 +93,8 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 if(s.data!=null){
                     for(String kind:List.of("ranks","sanctions"))if(profiles.includes(kind)){
                         NetworkStore.Module module=s.incomingModules.get(kind);
-                        profiles.importRank(e.getUniqueId(),kind,module==null?ProfileSync.empty(e.getUniqueId(),kind):ProfileSync.text(module.payload()));
+                        if(module!=null || !seedProfiles)
+                            profiles.importRank(e.getUniqueId(),kind,module==null?ProfileSync.empty(e.getUniqueId(),kind):ProfileSync.text(module.payload()));
                     }
                 }
             }
@@ -150,6 +153,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             boolean isVanilla=kind.equals("advancements")||kind.equals("statistics");
             if(isVanilla!=vanilla||!profiles.includes(kind))continue;
             NetworkStore.Module module=s.incomingModules.get(kind);
+            if(module==null&&seedProfiles)continue;
             String payload=module==null?ProfileSync.empty(p.getUniqueId(),kind):ProfileSync.text(module.payload());
             profiles.apply(p,kind,payload);
         }
