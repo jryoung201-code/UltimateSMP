@@ -45,4 +45,18 @@ CREATE TABLE IF NOT EXISTS blinksmp_network_v1.player_modules (
  updated_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY(player_id,category)
 );
+-- Additive network world border settings. Existing v2 plugins continue to run.
+-- Every dimension has one border shared by its Minecraft backends.
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.world_borders (
+ dimension text PRIMARY KEY CHECK(dimension IN ('Overworld','Nether','End')),
+ center_x integer NOT NULL DEFAULT 0,
+ center_z integer NOT NULL DEFAULT 0,
+ size_blocks integer NOT NULL DEFAULT 1000 CHECK(size_blocks BETWEEN 144 AND 59999968 AND size_blocks % 2=0),
+ enabled boolean NOT NULL DEFAULT false,
+ revision bigint NOT NULL DEFAULT 1 CHECK(revision>=1),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ CHECK(abs(center_x)::bigint+size_blocks/2<=29999984),
+ CHECK(abs(center_z)::bigint+size_blocks/2<=29999984)
+);
+
 UPDATE blinksmp_network_v1.meta SET version=2 WHERE id=1 AND version=1;
