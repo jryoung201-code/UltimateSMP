@@ -13,6 +13,50 @@ public final class NetworkStore implements AutoCloseable {
         public String loginServer(){return state.equals("handoff")?target:last;}
         public boolean permits(String from,String to) {return state.equals("handoff") && Objects.equals(owner,from)&&Objects.equals(target,to);}
     }
+
+    public static final Set<String> PROFILE_KINDS=Set.of("ranks","sanctions","homes","settings","advancements","statistics");
+    public record Module(long revision,byte[] payload) {
+        public Module { if(revision<1 || payload==null)throw new IllegalArgumentException("Invalid module");payload=payload.clone(); }
+        @Override public byte[] payload(){return payload.clone();}
+    }
+    private static String moduleKind(String kind) {
+        if(!PROFILE_KINDS.contains(kind))throw new IllegalArgumentException("Unknown profile module");
+        return kind;
+    }
+    /** A module is absent at revision 0. Reads and writes are JDBC-only and must run off the game thread. */
+    public Map<String,Module> modules(UUID player) throws SQLException {
+        Map<String,Module> found=new HashMap<>();
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement(
+             "SELECT category,revision,payload FROM "+S+"player_modules WHERE player_id=?")) {
+            q.setObject(1,player);
+            try(ResultSet r=q.executeQuery()){
+                while(r.next()) {
+                    String kind=moduleKind(r.getString(1));
+                    found.put(kind,new Module(r.getLong(2),r.getBytes(3)));
+                }
+            }
+        }
+        return Map.copyOf(found);
+    }
+    /** Optimistic compare-and-set: lost revisions never overwrite newer player state. */
+    public long writeModule(UUID player,String category,long expectedRevision,byte[] data) throws SQLException {
+        moduleKind(category);
+        if(expectedRevision<0 || data==null || data.length>2_097_152)throw new IllegalArgumentException("Invalid profile data");
+        if(expectedRevision==0) {
+            try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement(
+              "INSERT INTO "+S+"player_modules(player_id,category,revision,payload) VALUES(?,?,1,?) ON CONFLICT DO NOTHING")) {
+                s.setObject(1,player);s.setString(2,category);s.setBytes(3,data);
+                if(s.executeUpdate()!=1)throw new SQLException("Profile revision conflict: "+category);
+                return 1;
+            }
+        }
+        try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement(
+          "UPDATE "+S+"player_modules SET revision=revision+1,payload=?,updated_at=now() WHERE player_id=? AND category=? AND revision=?")) {
+            s.setBytes(1,data);s.setObject(2,player);s.setString(3,category);s.setLong(4,expectedRevision);
+            if(s.executeUpdate()!=1)throw new SQLException("Profile revision conflict: "+category);
+            return expectedRevision+1;
+        }
+    }
     public NetworkStore(String url,String user,String password) {
         if(url==null||!url.startsWith("jdbc:postgresql:"))throw new IllegalArgumentException("Set BLINK_NETWORK_JDBC_URL to a PostgreSQL JDBC URL");
         HikariConfig c=new HikariConfig();c.setJdbcUrl(url);c.setUsername(user);c.setPassword(password);
@@ -28,7 +72,7 @@ public final class NetworkStore implements AutoCloseable {
             c.commit();
         }
     }
-    public void verify() throws SQLException {try(Connection c=pool.getConnection();Statement s=c.createStatement();ResultSet r=s.executeQuery("SELECT version FROM "+S+"meta WHERE id=1")){if(!r.next()||r.getInt(1)!=1)throw new SQLException("Unsupported network schema");}}
+    public void verify() throws SQLException {try(Connection c=pool.getConnection();Statement s=c.createStatement();ResultSet r=s.executeQuery("SELECT version FROM "+S+"meta WHERE id=1")){if(!r.next()||r.getInt(1)!=2)throw new SQLException("Unsupported network schema");}}
     public void register(String server) throws SQLException {
         String dimension=Region.dimensionOf(server);
         try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement("INSERT INTO "+S+"servers(id,dimension) VALUES(?,?) ON CONFLICT DO NOTHING")){s.setString(1,server);s.setString(2,dimension);s.executeUpdate();}
