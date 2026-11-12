@@ -152,8 +152,26 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
             }
         }
     }
+    public String exportNetworkModule(UUID player,String kind) {
+        if(!kind.equals("settings"))throw new IllegalArgumentException("Not settings");
+        return store.exportNetworkModule(player);
+    }
+    public void importNetworkModule(UUID player,String kind,String payload) throws java.io.IOException {
+        if(!kind.equals("settings"))throw new IllegalArgumentException("Not settings");
+        store.importNetworkModule(player,payload);
+        if(Bukkit.isPrimaryThread()){
+            Player p=Bukkit.getPlayer(player);
+            if(p!=null)apply(p);
+        }
+    }
+    private void profileChanged(UUID id) {
+        org.bukkit.plugin.Plugin network=Bukkit.getPluginManager().getPlugin("BlinkNetwork");
+        if(network==null || !network.isEnabled())return;
+        try{network.getClass().getMethod("profileChanged",UUID.class,String.class).invoke(network,id,"settings");}
+        catch(ReflectiveOperationException ex){getLogger().warning("BlinkNetwork settings sync unavailable: "+ex.getClass().getSimpleName());}
+    }
     private void saveAndApply(Player p,Preferences next) {
-        try { store.put(p.getUniqueId(),next); }
+        try { store.put(p.getUniqueId(),next);profileChanged(p.getUniqueId()); }
         catch(java.io.IOException ex) { getLogger().severe("Settings save failed: "+ex); say(p,"Could not save. Your previous choices are unchanged."); return; }
         apply(p);
         if(!next.coordinates()) p.sendActionBar(Component.empty());
