@@ -93,6 +93,26 @@ public final class NetworkStore implements AutoCloseable {
             while(r.next()) {if(!r.getString(1).equals(r.getString(5)))throw new SQLException("Region owner dimension mismatch");result.put(new Region(r.getString(1),r.getInt(2),r.getInt(3)),r.getString(4));}
         }return Map.copyOf(result);
     }
+    /** Dimensions share one administrator-configured world border across their Paper instances. */
+    public record Border(String dimension,int centerX,int centerZ,int sizeBlocks,boolean enabled,long revision) {
+        public boolean contains(double x,double z) {
+            if(!enabled)return true;
+            double radius=sizeBlocks/2.0;
+            return Math.abs(x-centerX)<radius&&Math.abs(z-centerZ)<radius;
+        }
+    }
+    public Map<String,Border> borders() throws SQLException {
+        Map<String,Border> result=new HashMap<>();
+        try(Connection c=pool.getConnection();Statement s=c.createStatement();ResultSet r=s.executeQuery(
+            "SELECT dimension,center_x,center_z,size_blocks,enabled,revision FROM "+S+"world_borders")) {
+            while(r.next()){
+                Border b=new Border(r.getString(1),r.getInt(2),r.getInt(3),r.getInt(4),r.getBoolean(5),r.getLong(6));
+                if(b.sizeBlocks()<144||b.sizeBlocks()>59_999_968)throw new SQLException("Invalid network world border");
+                result.put(b.dimension(),b);
+            }
+        }
+        return Map.copyOf(result);
+    }
     /** Only initial assignment. Reassignment requires actual chunk migration; never upsert ownership. */
     public void assign(Region region,String server) throws SQLException {
         if(!region.dimension().equals(Region.dimensionOf(server)))throw new IllegalArgumentException("Dimension mismatch");
