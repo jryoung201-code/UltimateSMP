@@ -1,8 +1,10 @@
-# BlinkNetwork 0.2.1 — profile-sync staging release
+# BlinkNetwork 0.2.2 — profile-sync staging release
 
 Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neon PostgreSQL database, and persistent fenced sessions. This is a first network-layer release: live Java/Bedrock and fault testing is required before migrating the public server.
 
-## New in 0.2.1
+## New in 0.2.2
+- Fixes initial player-data import on Paper 1.21.11 by accepting its 43-slot inventory layout (including body and saddle) and restores old 41-slot snapshots without dropping items. Always back up original `world/playerdata` before first import.
+
 - Each Overworld, Nether and End can have one shared square world border configured on the protected map admin website. All Paper instances in a dimension apply Neon-defined borders during their normal five-second refresh. Unconfigured dimensions retain their vanilla borders.
 - Crossing a region or teleporting to a coordinate on a different backend initiates a fenced player transfer through Velocity (the original 0.2.0 movement logic).
 - An offline returning player is routed according to the ownership of the region containing their saved position. Legacy snapshots without readable coordinates retain old behavior.
@@ -11,7 +13,7 @@ Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neo
 
 ## What is implemented
 
-- Two JARs: `BlinkNetwork-Paper-0.2.1.jar` for every backend and `BlinkNetwork-Velocity-0.2.1.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
+- Two JARs: `BlinkNetwork-Paper-0.2.2.jar` for every backend and `BlinkNetwork-Velocity-0.2.2.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
 - Server IDs `BlinkSMP-(Overworld|Nether|End)-(01..99)`; additional registered servers need no code changes.
 - 9x9-chunk ownership regions (144x144 blocks), floor division for negative coordinates; initial ownership assignment, refresh within five seconds.
 - Automatic crossings to available destinations, vanilla teleport/portal destination interception, and reconnect routing using the player's saved coordinates and live region ownership. New players first enter the bootstrap server.
