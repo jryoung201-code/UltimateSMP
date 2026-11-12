@@ -46,6 +46,38 @@ public final class RankStore {
     }
     public Entry get(UUID id) { return entries.getOrDefault(id,new Entry(id.toString(),Rank.MEMBER,null,null,List.of())); }
     public Map<UUID,Entry> snapshot() { return entries; }
+    /** Serialize only one player's public rank or sanction data for BlinkNetwork. */
+    public String exportNetworkModule(UUID id,String kind) {
+        Entry e=get(id);YamlConfiguration y=new YamlConfiguration();y.set("version",1);
+        if(kind.equals("ranks")) {
+            y.set("name",e.name());y.set("rank",e.rank().name());
+        } else if(kind.equals("sanctions")) {
+            write(y,"mute",e.mute());write(y,"ban",e.ban());y.set("warnings",e.warnings());
+        } else throw new IllegalArgumentException("Unsupported rank module");
+        return y.saveToString();
+    }
+    /** May be called on an async pre-login thread, before rank ban enforcement. */
+    public synchronized void importNetworkModule(UUID id,String kind,String data) throws IOException {
+        if(data.length()>131072)throw new IOException("Rank profile too large");
+        YamlConfiguration y=new YamlConfiguration();
+        try {
+            y.loadFromString(data);
+            if(y.getInt("version")!=1)throw new IllegalArgumentException("Invalid rank profile version");
+            Entry old=get(id),next;
+            if(kind.equals("ranks")) {
+                String name=y.getString("name",old.name());
+                if(name.length()>64)throw new IllegalArgumentException("Name too large");
+                next=new Entry(name,Rank.parse(y.getString("rank","MEMBER")),old.mute(),old.ban(),old.warnings());
+            } else if(kind.equals("sanctions")) {
+                List<String> warnings=y.getStringList("warnings");
+                if(warnings.size()>500)throw new IllegalArgumentException("Too many warnings");
+                next=new Entry(old.name(),old.rank(),read(y,"mute"),read(y,"ban"),warnings);
+            } else throw new IllegalArgumentException("Unsupported rank module");
+            put(id,next);
+        } catch(org.bukkit.configuration.InvalidConfigurationException | RuntimeException ex) {
+            throw new IOException("Invalid rank profile; local state preserved",ex);
+        }
+    }
     public synchronized void put(UUID id,Entry entry) throws IOException {
         Map<UUID,Entry> next=new HashMap<>(entries); next.put(id,entry);
         YamlConfiguration y=new YamlConfiguration();
