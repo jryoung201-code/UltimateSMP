@@ -26,11 +26,16 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private volatile long refreshed;
     private volatile boolean ready,active,stopping;
     private NetworkStore db;
+    private ProfileSync profiles;
     private String id,dimension,bootstrap;private World world;private boolean importing;
     private static final class Session {
         final UUID token=UUID.randomUUID();volatile byte[] data;
         volatile boolean frozen=true,loaded,saving,transferring,closed,joined;
         volatile UUID ticket;volatile long freezeAt=System.currentTimeMillis();
+        volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
+        // Owned by the serialized I/O queue after the async prelogin claim.
+        final Map<String,Long> profileVersions=new HashMap<>();
+        final Map<String,byte[]> profileBaseline=new HashMap<>();
     }
     @Override public void onEnable(){
         saveDefaultConfig();Objects.requireNonNull(getCommand("blinknet")).setExecutor(this);
@@ -45,6 +50,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             World.Environment expected=switch(dimension){case "Nether"->World.Environment.NETHER;case "End"->World.Environment.THE_END;default->World.Environment.NORMAL;};
             if(world.getEnvironment()!=expected)throw new IllegalArgumentException("World environment does not match server ID");
             db=new NetworkStore(env("BLINK_NETWORK_JDBC_URL","database.jdbc-url"),env("BLINK_NETWORK_DB_USER","database.username"),env("BLINK_NETWORK_DB_PASSWORD","database.password"));
+            profiles=new ProfileSync(this);
             getServer().getMessenger().registerOutgoingPluginChannel(this,Protocol.CHANNEL);
             io.execute(()->{try{db.verify();db.register(id);if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");refresh();ready=true;}catch(Exception e){problem("Startup failed; joins blocked",e);}});
             Bukkit.getScheduler().runTaskTimer(this,()->{
@@ -56,6 +62,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 }
             },100,100);
             Bukkit.getScheduler().runTaskTimer(this,()->{if(ready)for(Player p:Bukkit.getOnlinePlayers()){Session s=sessions.get(p.getUniqueId());if(s!=null&&s.loaded&&!s.frozen&&!s.saving&&!s.transferring&&!p.isDead())checkpoint(p,s);}},600,600);
+            Bukkit.getScheduler().runTaskTimer(this,()->{if(ready&&profiles.active())pollProfileChanges();},100,100);
         }catch(Exception e){problem("Invalid setup; joins blocked until corrected and restarted",e);}
     }
     private String env(String key,String fallback){return System.getenv().getOrDefault(key,getConfig().getString(fallback,""));}
@@ -75,6 +82,19 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         try {
             s.data=db.claim(e.getUniqueId(),id,s.token,importing);
             if(s.data==null&&!importing)throw new IllegalStateException("No import authorization");
+            if(profiles.active()){
+                s.incomingModules=db.modules(e.getUniqueId());
+                for(var row:s.incomingModules.entrySet()){
+                    s.profileVersions.put(row.getKey(),row.getValue().revision());
+                    s.profileBaseline.put(row.getKey(),row.getValue().payload());
+                }
+                if(s.data!=null){
+                    for(String kind:List.of("ranks","sanctions"))if(profiles.includes(kind)){
+                        NetworkStore.Module module=s.incomingModules.get(kind);
+                        profiles.importRank(e.getUniqueId(),kind,module==null?ProfileSync.empty(e.getUniqueId(),kind):ProfileSync.text(module.payload()));
+                    }
+                }
+            }
         } catch(Exception ex){sessions.remove(e.getUniqueId(),s);releaseUnloaded(e.getUniqueId(),s);e.disallow(AsyncPlayerPreLoginEvent.Result.KICK_OTHER,"Network data could not be loaded safely. Contact staff.");problem("Login rejected",ex);}
     }
     @EventHandler(priority=EventPriority.MONITOR) public void preloginResult(AsyncPlayerPreLoginEvent e){
@@ -110,7 +130,10 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                         restoring.add(p.getUniqueId());boolean moved;
                         try{moved=p.teleport(dest,PlayerTeleportEvent.TeleportCause.PLUGIN);}finally{restoring.remove(p.getUniqueId());}
                         if(!moved)throw new IllegalStateException("Destination teleport was cancelled");
-                        snapshot.apply(p);s.loaded=true;checkpointInitial(p,s);
+                        restoreProfiles(p,s,true);
+                        snapshot.apply(p);
+                        restoreProfiles(p,s,false);
+                        s.loaded=true;checkpointInitial(p,s);
                     }catch(Exception ex){problem("Restore failed; state preserved",ex);p.kickPlayer("Destination could not be restored safely. Contact staff.");}
                 })).exceptionally(ex->{main(()->p.kickPlayer("Destination chunk could not load."));return null;});
             }catch(Exception ex){problem("Restore rejected; state preserved",ex);p.kickPlayer("Network state needs staff attention.");}
@@ -119,14 +142,111 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private final Set<UUID> restoring=new HashSet<>();
     private boolean owned(Location l){return !active||(l.getWorld()==world&&id.equals(regions.get(Region.at(dimension,l.getX(),l.getZ()))));}
     private boolean safe(Location l){return l.getY()>=world.getMinHeight()&&l.getY()<world.getMaxHeight()-1&&world.getWorldBorder().isInside(l)&&l.getBlock().isPassable()&&l.clone().add(0,1,0).getBlock().isPassable()&&l.getBlock().getType()!=Material.LAVA&&l.getBlock().getType()!=Material.FIRE;}
+    private void restoreProfiles(Player p,Session s,boolean vanilla) throws Exception {
+        if(profiles==null||!profiles.active())return;
+        // A bootstrap import retains the local plugin files. Existing network records are authoritative.
+        if(s.incomingModules.isEmpty() && s.data==null)return;
+        for(String kind:List.of("advancements","statistics","homes","settings")){
+            boolean isVanilla=kind.equals("advancements")||kind.equals("statistics");
+            if(isVanilla!=vanilla||!profiles.includes(kind))continue;
+            NetworkStore.Module module=s.incomingModules.get(kind);
+            String payload=module==null?ProfileSync.empty(p.getUniqueId(),kind):ProfileSync.text(module.payload());
+            profiles.apply(p,kind,payload);
+        }
+    }
+    private Map<String,byte[]> captureProfiles(Player p) throws Exception {
+        if(profiles==null||!profiles.active())return Map.of();
+        Map<String,byte[]> result=new LinkedHashMap<>();
+        for(String kind:List.of("ranks","sanctions","homes","settings","statistics","advancements"))
+            if(profiles.includes(kind))result.put(kind,ProfileSync.bytes(profiles.capture(p.getUniqueId(),kind)));
+        return Map.copyOf(result);
+    }
+    private void persistProfiles(UUID player,Session s,Map<String,byte[]> updated) throws Exception {
+        for(var row:updated.entrySet()) {
+            byte[] previous=s.profileBaseline.get(row.getKey());
+            if(Arrays.equals(previous,row.getValue()))continue;
+            long next=db.writeModule(player,row.getKey(),s.profileVersions.getOrDefault(row.getKey(),0L),row.getValue());
+            s.profileVersions.put(row.getKey(),next);
+            s.profileBaseline.put(row.getKey(),row.getValue());
+        }
+    }
+    /** Called on the primary server thread by the opt-in Ultimate plugins after an edit. */
+    public void profileChanged(UUID player,String kind) {
+        if(profiles==null||!profiles.includes(kind)||!ready||stopping)return;
+        if(!Bukkit.isPrimaryThread()){main(()->profileChanged(player,kind));return;}
+        try {
+            byte[] payload=ProfileSync.bytes(profiles.capture(player,kind));
+            Session s=sessions.get(player);
+            io.execute(()->{
+                try {
+                    if(s!=null)persistProfiles(player,s,Map.of(kind,payload));
+                    else {
+                        Map<String,NetworkStore.Module> current=db.modules(player);
+                        NetworkStore.Module old=current.get(kind);
+                        if(old==null||!Arrays.equals(old.payload(),payload))
+                            db.writeModule(player,kind,old==null?0:old.revision(),payload);
+                    }
+                }catch(Exception ex){problem("Player profile edit could not sync; inspect affected player",ex);
+                    if(s!=null)main(()->{Player p=Bukkit.getPlayer(player);if(p!=null){s.frozen=true;p.kickPlayer("Player profile sync failed. Contact staff.");}});
+                }
+            });
+        } catch(Exception ex){problem("Player profile capture rejected",ex);}
+    }
+    public World localHomeWorld(String targetDimension){
+        return active&&ready&&dimension.equals(targetDimension)?world:null;
+    }
+    public boolean isHomeRemote(String targetDimension,double x,double z){
+        if(!active||!ready||!Double.isFinite(x)||!Double.isFinite(z))return false;
+        String owner=regions.get(Region.at(targetDimension,x,z));
+        return owner!=null&&!id.equals(owner);
+    }
+    public boolean networkHomeTeleport(Player p,String targetDimension,double x,double y,double z,float yaw,float pitch){
+        if(!Bukkit.isPrimaryThread()||!active||!ready||blocked(p)||!Float.isFinite(yaw)||!Float.isFinite(pitch))return false;
+        if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z))return false;
+        String owner;
+        try{owner=regions.get(Region.at(targetDimension,x,z));}
+        catch(IllegalArgumentException ex){return false;}
+        if(owner==null||owner.equals(id)||!online.contains(owner)||System.currentTimeMillis()-refreshed>15_000)return false;
+        Session s=sessions.get(p.getUniqueId());
+        if(s==null||s.frozen||s.transferring)return false;
+        transfer(p,s,owner,targetDimension,new Location(world,x,y,z,yaw,pitch));
+        return s.transferring;
+    }
+    private void pollProfileChanges(){
+        for(Player p:Bukkit.getOnlinePlayers()){
+            UUID player=p.getUniqueId();Session s=sessions.get(player);
+            if(s==null||!s.loaded||s.frozen||s.transferring)continue;
+            io.execute(()->{
+                try{
+                    var changes=db.modules(player);
+                    for(String kind:List.of("ranks","sanctions")){
+                        if(!profiles.includes(kind))continue;
+                        NetworkStore.Module value=changes.get(kind);
+                        if(value==null||value.revision()<=s.profileVersions.getOrDefault(kind,0L))continue;
+                        s.profileVersions.put(kind,value.revision());s.profileBaseline.put(kind,value.payload());
+                        String payload=ProfileSync.text(value.payload());
+                        main(()->{
+                            if(p.isOnline()&&sessions.get(player)==s&&!s.frozen)
+                                try{profiles.importRank(player,kind,payload);}
+                                catch(Exception ex){problem("Live sanction/rank refresh failed",ex);s.frozen=true;p.kickPlayer("Network profile is unavailable.");}
+                        });
+                    }
+                }catch(Exception ex){problem("Profile refresh failed",ex);}
+            });
+        }
+    }
     private void checkpointInitial(Player p,Session s){
+        Map<String,byte[]> modules;
+        try{modules=captureProfiles(p);}catch(Exception ex){problem("Initial profile capture failed",ex);p.kickPlayer("Network profile capture failed.");return;}
         s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();byte[] bytes=s.data;
-        io.execute(()->{try{if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){s.frozen=false;p.sendMessage("BlinkSMP network data loaded.");}});}catch(Exception ex){problem("Initial save failed",ex);main(()->p.kickPlayer("Network save failed. Your data is locked for recovery."));}});
+        io.execute(()->{try{persistProfiles(p.getUniqueId(),s,modules);if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){s.frozen=false;p.sendMessage("BlinkSMP network data loaded.");}});}catch(Exception ex){problem("Initial save failed",ex);main(()->p.kickPlayer("Network save failed. Your data is locked for recovery."));}});
     }
     private void checkpoint(Player p,Session s){
         try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();}catch(Exception e){return;}
-        byte[] bytes=s.data;s.saving=true;
-        io.execute(()->{try{if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");}catch(Exception ex){main(()->{s.frozen=true;s.freezeAt=System.currentTimeMillis();p.kickPlayer("Network save failed. Reconnect later.");});problem("Checkpoint failed",ex);}finally{s.saving=false;}});
+        byte[] bytes=s.data;Map<String,byte[]> modules;
+        try{modules=captureProfiles(p);}catch(Exception ex){problem("Checkpoint profile capture failed",ex);return;}
+        s.saving=true;
+        io.execute(()->{try{persistProfiles(p.getUniqueId(),s,modules);if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");}catch(Exception ex){main(()->{s.frozen=true;s.freezeAt=System.currentTimeMillis();p.kickPlayer("Network save failed. Reconnect later.");});problem("Checkpoint failed",ex);}finally{s.saving=false;}});
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void move(PlayerMoveEvent e){
         Player p=e.getPlayer();if(!active||restoring.contains(p.getUniqueId()))return;
@@ -162,9 +282,11 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             s.frozen=true;s.freezeAt=System.currentTimeMillis();s.transferring=true;s.ticket=UUID.randomUUID();
             byte[] source=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();
             byte[] destination=PlayerSnapshot.capture(p,destDimension,dest).bytes();s.data=source;
+            Map<String,byte[]> modules=captureProfiles(p);
             UUID ticket=s.ticket;
             io.execute(()->{
                 try {
+                    persistProfiles(p.getUniqueId(),s,modules);
                     if(!db.prepare(p.getUniqueId(),s.token,target,ticket,source,destination))throw new IllegalStateException("Destination unavailable or session fenced");
                     main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){try{p.sendPluginMessage(this,Protocol.CHANNEL,new Protocol(p.getUniqueId(),ticket,target).bytes());}catch(Exception ex){problem("Proxy request failed",ex);}}});
                 }catch(Exception ex){problem("Transfer preparation failed",ex);cancel(p,s,ticket);}
@@ -199,11 +321,12 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             }catch(Exception ex){problem("Death snapshot failed",ex);p.kickPlayer("Network state needs staff attention.");}
         }});
     }
-    @EventHandler(priority=EventPriority.MONITOR) public void quit(PlayerQuitEvent e){
+    @EventHandler(priority=EventPriority.LOWEST) public void quit(PlayerQuitEvent e){
         Session s=sessions.remove(e.getPlayer().getUniqueId());if(s==null)return;s.closed=true;
         if(s.transferring)return; // Destination owns the prepared snapshot. Never overwrite it on quit.
-        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
-        byte[] bytes=s.data;io.execute(()->{try{if(bytes==null)db.abandonEmpty(e.getPlayer().getUniqueId(),s.token);else db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
+        Map<String,byte[]> modules=Map.of();
+        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();modules=captureProfiles(e.getPlayer());}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
+        byte[] bytes=s.data;Map<String,byte[]> savedModules=modules;io.execute(()->{try{persistProfiles(e.getPlayer().getUniqueId(),s,savedModules);if(bytes==null)db.abandonEmpty(e.getPlayer().getUniqueId(),s.token);else db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void click(InventoryClickEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void drag(InventoryDragEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
@@ -241,9 +364,10 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         // Capture synchronously, persist asynchronously, then wait a bounded time during shutdown.
         if(db!=null)for(Player p:Bukkit.getOnlinePlayers()){
             Session s=sessions.remove(p.getUniqueId());if(s==null||s.transferring)continue;
-            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();}catch(Exception ignored){}
+            Map<String,byte[]> modules=Map.of();
+            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();modules=captureProfiles(p);}catch(Exception ignored){}
             p.kickPlayer("BlinkSMP network is shutting down. Please reconnect shortly.");
-            byte[] data=s.data;if(data!=null)io.execute(()->{try{db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
+            byte[] data=s.data;Map<String,byte[]> savedModules=modules;if(data!=null)io.execute(()->{try{persistProfiles(p.getUniqueId(),s,savedModules);db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
         }
         io.shutdown();try{if(!io.awaitTermination(20,TimeUnit.SECONDS))getLogger().severe("Shutdown persistence timed out; retained locks may need recovery.");}catch(InterruptedException ex){Thread.currentThread().interrupt();}
         if(db!=null)db.close();
