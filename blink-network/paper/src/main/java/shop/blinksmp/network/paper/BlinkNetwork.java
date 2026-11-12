@@ -406,7 +406,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void command(PlayerCommandPreprocessEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void chat(AsyncChatEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.0: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.1: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         String[] a=args.clone();io.execute(()->{try{
