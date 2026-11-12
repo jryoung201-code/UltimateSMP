@@ -1,4 +1,4 @@
--- BlinkNetwork protocol v1. Apply with the direct Neon URL using a migration role.
+-- BlinkNetwork protocol v2. Apply with the direct Neon URL using a migration role.
 -- Deliberately separate from the website's schema until its contract is connected.
 CREATE SCHEMA IF NOT EXISTS blinksmp_network_v1;
 CREATE TABLE IF NOT EXISTS blinksmp_network_v1.meta (id integer PRIMARY KEY CHECK(id=1), version integer NOT NULL);
@@ -34,3 +34,15 @@ CREATE TABLE IF NOT EXISTS blinksmp_network_v1.audit (
  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
  at timestamptz NOT NULL DEFAULT now(), action text NOT NULL, detail text NOT NULL
 );
+
+-- Additive profile synchronization table; run this migration while the network is stopped.
+-- Sanctions are deliberately separate from rank assignment for selective updates.
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.player_modules (
+ player_id uuid NOT NULL,
+ category text NOT NULL CHECK(category IN ('ranks','sanctions','homes','settings','advancements','statistics')),
+ revision bigint NOT NULL CHECK(revision>=1),
+ payload bytea NOT NULL CHECK(octet_length(payload)<=2097152),
+ updated_at timestamptz NOT NULL DEFAULT now(),
+ PRIMARY KEY(player_id,category)
+);
+UPDATE blinksmp_network_v1.meta SET version=2 WHERE id=1 AND version=1;
