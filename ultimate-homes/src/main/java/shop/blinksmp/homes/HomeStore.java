@@ -12,10 +12,19 @@ import org.bukkit.configuration.file.YamlConfiguration;
 
 /** Main-thread store; changes reach disk before the in-memory map is published. */
 public final class HomeStore {
-    public record Home(String name,UUID world,String worldName,double x,double y,double z,float yaw,float pitch) {
+    public record Home(String name,UUID world,String worldName,String dimension,double x,double y,double z,float yaw,float pitch) {
         public Home {
             name=HomeLimits.name(name);Objects.requireNonNull(world);Objects.requireNonNull(worldName);
+            if(!Set.of("Overworld","Nether","End").contains(dimension))throw new IllegalArgumentException("Invalid home dimension");
             if(!Double.isFinite(x)||!Double.isFinite(y)||!Double.isFinite(z)||!Float.isFinite(yaw)||!Float.isFinite(pitch)) throw new IllegalArgumentException("Invalid home coordinates");
+        }
+        public Home(String name,UUID world,String worldName,double x,double y,double z,float yaw,float pitch) {
+            this(name,world,worldName,legacyDimension(worldName),x,y,z,yaw,pitch);
+        }
+        private static String legacyDimension(String worldName) {
+            if(worldName.endsWith("_nether"))return "Nether";
+            if(worldName.endsWith("_the_end"))return "End";
+            return "Overworld";
         }
     }
     private final Path directory;
@@ -36,7 +45,7 @@ public final class HomeStore {
                     ConfigurationSection node=Objects.requireNonNull(section.getConfigurationSection(key));
                     if(!HomeLimits.name(key).equals(key)) throw new IllegalArgumentException("Invalid stored name");
                     for(String number:List.of("x","y","z","yaw","pitch")) if(!node.isDouble(number) && !node.isInt(number) && !node.isLong(number)) throw new IllegalArgumentException("Invalid coordinate "+number);
-                    Home home=new Home(key,UUID.fromString(node.getString("world","")),node.getString("world-name","Unknown"),node.getDouble("x"),node.getDouble("y"),node.getDouble("z"),(float)node.getDouble("yaw"),(float)node.getDouble("pitch"));
+                    Home home=new Home(key,UUID.fromString(node.getString("world","")),node.getString("world-name","Unknown"),node.getString("dimension",Home.legacyDimension(node.getString("world-name","Unknown"))),node.getDouble("x"),node.getDouble("y"),node.getDouble("z"),(float)node.getDouble("yaw"),(float)node.getDouble("pitch"));
                     loaded.put(key,home);
                 }
             } catch(InvalidConfigurationException|RuntimeException ex) { throw new IOException("Cannot read home data; original file preserved",ex); }
@@ -55,7 +64,7 @@ public final class HomeStore {
     private void save(UUID id,SortedMap<String,Home> homes) throws IOException {
         YamlConfiguration yaml=new YamlConfiguration();yaml.set("version",1);yaml.set("owner",id.toString());yaml.createSection("homes");
         for(Home h:homes.values()) {
-            String key="homes."+h.name()+".";yaml.set(key+"world",h.world().toString());yaml.set(key+"world-name",h.worldName());
+            String key="homes."+h.name()+".";yaml.set(key+"world",h.world().toString());yaml.set(key+"world-name",h.worldName());yaml.set(key+"dimension",h.dimension());
             yaml.set(key+"x",h.x());yaml.set(key+"y",h.y());yaml.set(key+"z",h.z());yaml.set(key+"yaw",h.yaw());yaml.set(key+"pitch",h.pitch());
         }
         byte[] bytes=yaml.saveToString().getBytes(StandardCharsets.UTF_8);
@@ -69,6 +78,38 @@ public final class HomeStore {
             catch(AtomicMoveNotSupportedException ex) { throw new IOException("Atomic home-data replacement is unsupported; previous file preserved",ex); }
             cache.put(id,new TreeMap<>(homes));
         } finally { Files.deleteIfExists(temp); }
+    }
+    public String exportNetworkModule(UUID id) throws IOException {
+        YamlConfiguration y=new YamlConfiguration();
+        y.set("version",1);y.set("owner",id.toString());y.createSection("homes");
+        for(Home h:homes(id).values()) {
+            String key="homes."+h.name()+".";
+            y.set(key+"world",h.world().toString());y.set(key+"world-name",h.worldName());y.set(key+"dimension",h.dimension());
+            y.set(key+"x",h.x());y.set(key+"y",h.y());y.set(key+"z",h.z());y.set(key+"yaw",h.yaw());y.set(key+"pitch",h.pitch());
+        }
+        return y.saveToString();
+    }
+    public void importNetworkModule(UUID id,String payload) throws IOException {
+        if(payload.length()>2_000_000)throw new IOException("Home profile too large");
+        TreeMap<String,Home> copy=new TreeMap<>();
+        try {
+            YamlConfiguration y=new YamlConfiguration();y.loadFromString(payload);
+            if(y.getInt("version")!=1 || !id.toString().equals(y.getString("owner")))throw new IllegalArgumentException("Invalid home owner/version");
+            ConfigurationSection section=y.getConfigurationSection("homes");
+            if(section==null || section.getKeys(false).size()>10000)throw new IllegalArgumentException("Invalid homes");
+            for(String name:section.getKeys(false)){
+                if(!name.equals(HomeLimits.name(name)))throw new IllegalArgumentException("Invalid home name");
+                ConfigurationSection n=Objects.requireNonNull(section.getConfigurationSection(name));
+                for(String number:List.of("x","y","z","yaw","pitch"))
+                    if(!n.isDouble(number)&&!n.isInt(number)&&!n.isLong(number))throw new IllegalArgumentException("Invalid "+number);
+                String worldName=n.getString("world-name","Unknown");
+                Home h=new Home(name,UUID.fromString(n.getString("world","")),worldName,
+                    n.getString("dimension",Home.legacyDimension(worldName)),n.getDouble("x"),n.getDouble("y"),n.getDouble("z"),
+                    (float)n.getDouble("yaw"),(float)n.getDouble("pitch"));
+                copy.put(name,h);
+            }
+        }catch(InvalidConfigurationException|RuntimeException ex){throw new IOException("Invalid home profile; local homes preserved",ex);}
+        save(id,copy);
     }
     public void unload(UUID id) { cache.remove(id); }
 }
