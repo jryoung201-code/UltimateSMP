@@ -34,12 +34,13 @@ jobs:
           cache: maven
       - name: Build and test against PostgreSQL
         run: mvn -B -ntp -f blink-network/pom.xml verify
-      - uses: actions/upload-artifact@v4
+      - if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
         with:
-          name: BlinkNetwork-0.2.0
+          name: BlinkNetwork-0.2.1
           path: |
-            blink-network/paper/target/BlinkNetwork-Paper-0.2.0.jar
-            blink-network/velocity/target/BlinkNetwork-Velocity-0.2.0.jar
+            blink-network/paper/target/BlinkNetwork-Paper-0.2.1.jar
+            blink-network/velocity/target/BlinkNetwork-Velocity-0.2.1.jar
             blink-network/README.md
             blink-network/WEBSITE-INTEGRATION.md
             blink-network/common/src/main/resources/schema.sql
