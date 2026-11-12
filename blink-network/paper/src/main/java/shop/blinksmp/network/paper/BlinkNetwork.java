@@ -31,7 +31,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private String id,dimension,bootstrap;private World world;private boolean importing;
     private static final class Session {
         final UUID token=UUID.randomUUID();volatile byte[] data;
-        volatile boolean frozen=true,loaded,saving,transferring,closed,joined;
+        volatile boolean frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
         volatile UUID ticket;volatile long freezeAt=System.currentTimeMillis();
         volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
         // Owned by the serialized I/O queue after the async prelogin claim.
@@ -63,7 +63,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                     if(s!=null&&s.frozen&&System.currentTimeMillis()-s.freezeAt>30_000)p.kickPlayer("Network loading timed out. Contact staff if reconnecting fails.");
                 }
             },100,100);
-            Bukkit.getScheduler().runTaskTimer(this,()->{if(ready)for(Player p:Bukkit.getOnlinePlayers()){Session s=sessions.get(p.getUniqueId());if(s!=null&&s.loaded&&!s.frozen&&!s.saving&&!s.transferring&&!p.isDead())checkpoint(p,s);}},600,600);
+            Bukkit.getScheduler().runTaskTimer(this,()->{if(ready)for(Player p:Bukkit.getOnlinePlayers()){Session s=sessions.get(p.getUniqueId());if(s!=null&&s.loaded&&!s.frozen&&!s.saving&&!s.transferring&&!s.profileRefreshing&&!p.isDead())checkpoint(p,s);}},600,600);
             Bukkit.getScheduler().runTaskTimer(this,()->{if(ready&&profiles.active())pollProfileChanges();},100,100);
         }catch(Exception e){problem("Invalid setup; joins blocked until corrected and restarted",e);}
     }
@@ -219,22 +219,40 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private void pollProfileChanges(){
         for(Player p:Bukkit.getOnlinePlayers()){
             UUID player=p.getUniqueId();Session s=sessions.get(player);
-            if(s==null||!s.loaded||s.frozen||s.transferring)continue;
+            if(s==null||!s.loaded||s.frozen||s.transferring||s.profileRefreshing)continue;
             io.execute(()->{
                 try{
-                    var changes=db.modules(player);
+                    var remote=db.modules(player);
+                    Map<String,NetworkStore.Module> changed=new LinkedHashMap<>();
                     for(String kind:List.of("ranks","sanctions")){
                         if(!profiles.includes(kind))continue;
-                        NetworkStore.Module value=changes.get(kind);
-                        if(value==null||value.revision()<=s.profileVersions.getOrDefault(kind,0L))continue;
-                        s.profileVersions.put(kind,value.revision());s.profileBaseline.put(kind,value.payload());
-                        String payload=ProfileSync.text(value.payload());
-                        main(()->{
-                            if(p.isOnline()&&sessions.get(player)==s&&!s.frozen)
-                                try{profiles.importRank(player,kind,payload);}
-                                catch(Exception ex){problem("Live sanction/rank refresh failed",ex);s.frozen=true;p.kickPlayer("Network profile is unavailable.");}
-                        });
+                        NetworkStore.Module value=remote.get(kind);
+                        if(value!=null&&value.revision()>s.profileVersions.getOrDefault(kind,0L))
+                            changed.put(kind,value);
                     }
+                    if(changed.isEmpty())return;
+                    s.profileRefreshing=true;
+                    main(()->{
+                        if(!p.isOnline()||sessions.get(player)!=s||s.frozen||s.transferring){
+                            s.profileRefreshing=false;return;
+                        }
+                        try{
+                            for(var entry:changed.entrySet())
+                                profiles.importRank(player,entry.getKey(),ProfileSync.text(entry.getValue().payload()));
+                            // Release refreshing only after the I/O thread updates both CAS baselines.
+                            io.execute(()->{
+                                for(var entry:changed.entrySet()){
+                                    s.profileVersions.put(entry.getKey(),entry.getValue().revision());
+                                    s.profileBaseline.put(entry.getKey(),entry.getValue().payload());
+                                }
+                                s.profileRefreshing=false;
+                            });
+                        }catch(Exception ex){
+                            problem("Live sanction/rank refresh failed",ex);
+                            s.frozen=true;s.profileRefreshing=false;
+                            p.kickPlayer("Network profile is unavailable.");
+                        }
+                    });
                 }catch(Exception ex){problem("Profile refresh failed",ex);}
             });
         }
@@ -279,7 +297,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         else e.getPlayer().sendMessage("That destination has no available network server.");
     }
     private void transfer(Player p,Session s,String target,String destDimension,Location dest){
-        if(s==null||s.frozen||s.transferring||s.saving||p.isDead()||p.isInsideVehicle()||!p.getPassengers().isEmpty()||p.isSleeping())return;
+        if(s==null||s.frozen||s.transferring||s.saving||s.profileRefreshing||p.isDead()||p.isInsideVehicle()||!p.getPassengers().isEmpty()||p.isSleeping())return;
         if(p.getOpenInventory().getTopInventory().getType()!=InventoryType.CRAFTING){p.sendActionBar("Close your inventory before crossing.");return;}
         if(!p.getItemOnCursor().isEmpty()||Arrays.stream(p.getOpenInventory().getTopInventory().getContents()).anyMatch(item->item!=null&&!item.isEmpty())){p.sendActionBar("Empty your cursor and crafting grid before crossing.");return;}
         try {
