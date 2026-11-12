@@ -93,13 +93,81 @@ public final class NetworkStore implements AutoCloseable {
             while(r.next()) {if(!r.getString(1).equals(r.getString(5)))throw new SQLException("Region owner dimension mismatch");result.put(new Region(r.getString(1),r.getInt(2),r.getInt(3)),r.getString(4));}
         }return Map.copyOf(result);
     }
+    /** Dimensions share one administrator-configured world border across their Paper instances. */
+    public record Border(String dimension,int centerX,int centerZ,int sizeBlocks,boolean enabled,long revision) {
+        public boolean contains(double x,double z) {
+            if(!enabled)return true;
+            double radius=sizeBlocks/2.0;
+            return Math.abs(x-centerX)<radius&&Math.abs(z-centerZ)<radius;
+        }
+        public boolean containsRegion(Region region) {
+            if(!enabled)return true;
+            if(!dimension.equals(region.dimension()))return false;
+            double half=sizeBlocks/2.0;
+            return region.x()*144.0>=centerX-half&&(region.x()+1)*144.0<=centerX+half
+                &&region.z()*144.0>=centerZ-half&&(region.z()+1)*144.0<=centerZ+half;
+        }
+    }
+    public Map<String,Border> borders() throws SQLException {
+        Map<String,Border> result=new HashMap<>();
+        try(Connection c=pool.getConnection();Statement s=c.createStatement();ResultSet r=s.executeQuery(
+            "SELECT dimension,center_x,center_z,size_blocks,enabled,revision FROM "+S+"world_borders")) {
+            while(r.next()){
+                Border b=new Border(r.getString(1),r.getInt(2),r.getInt(3),r.getInt(4),r.getBoolean(5),r.getLong(6));
+                if(b.sizeBlocks()<144||b.sizeBlocks()>59_999_968)throw new SQLException("Invalid network world border");
+                result.put(b.dimension(),b);
+            }
+        }
+        return Map.copyOf(result);
+    }
     /** Only initial assignment. Reassignment requires actual chunk migration; never upsert ownership. */
     public void assign(Region region,String server) throws SQLException {
         if(!region.dimension().equals(Region.dimensionOf(server)))throw new IllegalArgumentException("Dimension mismatch");
+        Border border=borders().get(region.dimension());
+        if(border!=null&&!border.containsRegion(region))throw new SQLException("Region is outside the configured world border");
         try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement("INSERT INTO "+S+"regions(dimension,region_x,region_z,server_id) VALUES(?,?,?,?)")){s.setString(1,region.dimension());s.setInt(2,region.x());s.setInt(3,region.z());s.setString(4,server);s.executeUpdate();}
     }
     public Route route(UUID id) throws SQLException {
         try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement("SELECT state,last_server,owner,target,ticket FROM "+S+"players WHERE player_id=?")){s.setObject(1,id);try(ResultSet r=s.executeQuery()){return r.next()?new Route(r.getString(1),r.getString(2),r.getString(3),r.getString(4),(UUID)r.getObject(5)):null;}}
+    }
+    /** Determines the correct server for a saved player's coordinates when ownership was edited offline. */
+    public String loginTarget(UUID id,Route route) throws SQLException {
+        if(!"offline".equals(route.state()))return route.loginServer();
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement(
+            "SELECT payload FROM "+S+"players WHERE player_id=? AND state='offline'")) {
+            q.setObject(1,id);
+            try(ResultSet result=q.executeQuery()){
+                if(!result.next())throw new SQLException("Offline session no longer available");
+                byte[] bytes=result.getBytes(1);
+                if(bytes==null)return route.loginServer();
+                Region region=regionFromSnapshot(bytes);
+                String owner=ownerOf(c,region);
+                if(owner==null)throw new SQLException("Player's saved coordinates are in an unassigned region");
+                return owner;
+            }
+        }
+    }
+    /** Read only the three top-level YAML scalars needed for routing, never deserialize untrusted objects. */
+    private static Region regionFromSnapshot(byte[] payload) throws SQLException {
+        if(payload.length==0||payload.length>2_097_152)throw new SQLException("Invalid player snapshot");
+        String src=new String(payload,StandardCharsets.UTF_8);
+        String dimension=null,x=null,z=null;
+        for(String line:src.split("\\R")){
+            if(line.startsWith("dimension: "))dimension=line.substring("dimension: ".length()).trim();
+            else if(line.startsWith("x: "))x=line.substring(3).trim();
+            else if(line.startsWith("z: "))z=line.substring(3).trim();
+        }
+        try {
+            if(dimension==null||x==null||z==null)throw new IllegalArgumentException();
+            return Region.at(dimension,Double.parseDouble(x),Double.parseDouble(z));
+        }catch(RuntimeException ex){throw new SQLException("Invalid saved position",ex);}
+    }
+    private static String ownerOf(Connection c,Region region) throws SQLException {
+        try(PreparedStatement q=c.prepareStatement(
+            "SELECT server_id FROM "+S+"regions WHERE dimension=? AND region_x=? AND region_z=?")){
+            q.setString(1,region.dimension());q.setInt(2,region.x());q.setInt(3,region.z());
+            try(ResultSet result=q.executeQuery()){return result.next()?result.getString(1):null;}
+        }
     }
     public byte[] claim(UUID id,String server,UUID session,boolean bootstrap) throws SQLException {
         try(Connection c=pool.getConnection()) {
@@ -109,8 +177,20 @@ public final class NetworkStore implements AutoCloseable {
             try(PreparedStatement s=c.prepareStatement("SELECT state,last_server,target,payload FROM "+S+"players WHERE player_id=? FOR UPDATE")) {
                 s.setObject(1,id);try(ResultSet r=s.executeQuery()) {
                     if(!r.next())throw new SQLException("New players must first join the bootstrap server");
-                    boolean allowed=(r.getString(1).equals("offline")&&server.equals(r.getString(2)))||(r.getString(1).equals("handoff")&&server.equals(r.getString(3)));
-                    if(!allowed)throw new SQLException("Player state is held by another session/server");data=r.getBytes(4);
+                    data=r.getBytes(4);
+                    boolean offline=r.getString(1).equals("offline");
+                    boolean allowed=(offline&&server.equals(r.getString(2)))||(r.getString(1).equals("handoff")&&server.equals(r.getString(3)));
+                    if(offline&&data!=null) {
+                        // Native snapshots route by their stored coordinates. Legacy unreadable
+                        // snapshots may still be claimed only on their original backend.
+                        try {
+                            String owner=ownerOf(c,regionFromSnapshot(data));
+                            allowed=server.equals(owner);
+                        }catch(SQLException malformed) {
+                            if(!server.equals(r.getString(2)))throw malformed;
+                        }
+                    }
+                    if(!allowed)throw new SQLException("Player state is held by another session/server or saved region is unassigned");
                 }
             }
             try(PreparedStatement s=c.prepareStatement("UPDATE "+S+"players SET state='active',owner=?,last_server=?,session=?,target=NULL,ticket=NULL,rollback_payload=NULL,updated_at=now() WHERE player_id=?")){s.setString(1,server);s.setString(2,server);s.setObject(3,session);s.setObject(4,id);s.executeUpdate();}

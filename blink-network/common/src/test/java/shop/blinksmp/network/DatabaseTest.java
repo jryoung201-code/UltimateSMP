@@ -66,6 +66,35 @@ class DatabaseTest {
         assertThrows(IllegalArgumentException.class,()->db.writeModule(player,"economy",0,new byte[]{1}));
         assertThrows(IllegalArgumentException.class,()->db.writeModule(player,"settings",0,new byte[2_097_153]));
     }
+    @Test void savedCoordinatesSelectCorrectBackendAfterOwnershipChange()throws Exception{
+        Region r=new Region("Overworld",5000+new Random().nextInt(5000),3000+new Random().nextInt(5000));
+        db.assign(r,B);
+        UUID player=UUID.randomUUID(),session=UUID.randomUUID();
+        db.claim(player,A,session,true);
+        byte[] snapshot=("version: 1\ndimension: Overworld\nx: "+(r.x()*144+12)+".0\ny: 70.0\nz: "+(r.z()*144+12)+".0\n")
+            .getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(db.save(player,session,snapshot,true));
+        assertEquals(B,db.loginTarget(player,db.route(player)));
+        assertThrows(SQLException.class,()->db.claim(player,A,UUID.randomUUID(),false));
+        assertArrayEquals(snapshot,db.claim(player,B,UUID.randomUUID(),false));
+    }
+    @Test void worldBorderRejectsOutOfBoundsRegionAssignment()throws Exception{
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres")){
+            try(PreparedStatement q=c.prepareStatement(
+                "INSERT INTO blinksmp_network_v1.world_borders(dimension,center_x,center_z,size_blocks,enabled) VALUES('Overworld',0,0,576,true) ON CONFLICT(dimension) DO UPDATE SET center_x=0,center_z=0,size_blocks=576,enabled=true")){
+                q.executeUpdate();
+            }
+            try {
+                NetworkStore.Border border=db.borders().get("Overworld");
+                assertNotNull(border);assertTrue(border.contains(5,5));
+                assertTrue(border.containsRegion(new Region("Overworld",0,0)));
+                assertFalse(border.containsRegion(new Region("Overworld",3,0)));
+                assertThrows(SQLException.class,()->db.assign(new Region("Overworld",3,0),A));
+            }finally{
+                try(Statement q=c.createStatement()){q.executeUpdate("DELETE FROM blinksmp_network_v1.world_borders WHERE dimension='Overworld'");}
+            }
+        }
+    }
     @Test void payloadBoundsRejectedBeforeWriting()throws Exception{
         UUID p=UUID.randomUUID(),s=UUID.randomUUID();db.claim(p,A,s,true);
         assertThrows(IllegalArgumentException.class,()->db.save(p,s,new byte[2097153],false));

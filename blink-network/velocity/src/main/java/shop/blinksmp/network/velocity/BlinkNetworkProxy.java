@@ -42,7 +42,7 @@ public final class BlinkNetworkProxy {
             try {
                 Player player=event.getPlayer();NetworkStore.Route route=db.route(player.getUniqueId());
                 Optional<ServerConnection> from=player.getCurrentServer();String target;
-                if(from.isEmpty())target=route==null?bootstrap:route.loginServer();
+                if(from.isEmpty())target=route==null?bootstrap:db.loginTarget(player.getUniqueId(),route);
                 else {
                     target=event.getResult().getServer().map(s->s.getServerInfo().getName()).orElse("");
                     if(route==null||!route.permits(from.get().getServerInfo().getName(),target)){event.setResult(ServerPreConnectEvent.ServerResult.denied());return;}

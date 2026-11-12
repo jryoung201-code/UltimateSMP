@@ -1,13 +1,20 @@
-# BlinkNetwork 0.2.0 — profile-sync staging release
+# BlinkNetwork 0.2.1 — profile-sync staging release
 
 Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neon PostgreSQL database, and persistent fenced sessions. This is a first network-layer release: live Java/Bedrock and fault testing is required before migrating the public server.
 
+## New in 0.2.1
+- Each Overworld, Nether and End can have one shared square world border configured on the protected map admin website. All Paper instances in a dimension apply Neon-defined borders during their normal five-second refresh. Unconfigured dimensions retain their vanilla borders.
+- Crossing a region or teleporting to a coordinate on a different backend initiates a fenced player transfer through Velocity (the original 0.2.0 movement logic).
+- An offline returning player is routed according to the ownership of the region containing their saved position. Legacy snapshots without readable coordinates retain old behavior.
+- Server heartbeat initialization retries after transient Neon outages and duplicate instance claims; the plugin no longer remains permanently BLOCKED after a one-time failure.
+- Additive schema migration: create `blinksmp_network_v1.world_borders` **before deploying updated Paper JARs**, but keep `meta.version=2`. Do not overwrite existing player snapshots or active ownership. The map's removal operation deletes ownership metadata only, never world files. It rejects active players and protects the origin/spawn region.
+
 ## What is implemented
 
-- Two JARs: `BlinkNetwork-Paper-0.2.0.jar` for every backend and `BlinkNetwork-Velocity-0.2.0.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
+- Two JARs: `BlinkNetwork-Paper-0.2.1.jar` for every backend and `BlinkNetwork-Velocity-0.2.1.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
 - Server IDs `BlinkSMP-(Overworld|Nether|End)-(01..99)`; additional registered servers need no code changes.
 - 9x9-chunk ownership regions (144x144 blocks), floor division for negative coordinates; initial ownership assignment, refresh within five seconds.
-- Automatic crossings to available destinations, vanilla teleport/portal destination interception, and reconnect routing to the last server. New players first enter the bootstrap server.
+- Automatic crossings to available destinations, vanilla teleport/portal destination interception, and reconnect routing using the player's saved coordinates and live region ownership. New players first enter the bootstrap server.
 - Main-thread item/state capture, off-thread JDBC, UUID session fencing and one-time pending tickets. Source quit never overwrites prepared destination state. Ordinary failed switches roll back only if the source still owns the handoff. Unknown database outcomes retain a lock rather than loading an arbitrary old inventory.
 - Serialized inventory/armor/offhand and Ender Chest using Paper NBT, selected slot, health, hunger, saturation, exhaustion, XP, gamemode, effects, air/fire and destination position. Effect timers pause during transfer. Fall distance is reset at arrival.
 - Only the configured local dimension/world is playable per backend. Unassigned/offline borders are blocked. Block break/place/interaction is restricted to assigned territory. Vehicles/passengers and open container/crafting transfers are rejected.
