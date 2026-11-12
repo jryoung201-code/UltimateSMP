@@ -24,6 +24,9 @@ database:
 # All Paper backends must use the same choices. Disabled until plugin adapters are verified.
 profile-sync:
   enabled: false
+  # Temporarily true ONLY on the original bootstrap server for a one-time import
+  # of existing locally stored player ranks, homes and settings when Neon has no module.
+  seed-missing-from-local: false
   ranks: true
   sanctions: true
   homes: true
