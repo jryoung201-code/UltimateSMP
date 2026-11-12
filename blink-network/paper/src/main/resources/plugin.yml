@@ -1,9 +1,9 @@
 name: BlinkNetwork
-version: 0.1.0
+version: 0.2.0
 main: shop.blinksmp.network.paper.BlinkNetwork
 api-version: '1.21.11'
 author: RealJR_25736
-description: Region routing and fenced Neon player handoffs for BlinkSMP
+description: Region routing, fenced handoffs and player profile synchronization for BlinkSMP
 commands:
   blinknet:
     description: Network status and console-only setup
