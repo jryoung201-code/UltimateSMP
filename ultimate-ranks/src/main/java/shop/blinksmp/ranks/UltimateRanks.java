@@ -111,8 +111,27 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         getLogger().info(text);
         for(Player p:Bukkit.getOnlinePlayers()) if(rank(p.getUniqueId()).level>=Rank.HELPER.level) say(p,"&7"+text);
     }
+    /** Called by the network plugin before join, and by its profile refresh task. */
+    public String exportNetworkModule(UUID player,String kind) { return store.exportNetworkModule(player,kind); }
+    public void importNetworkModule(UUID player,String kind,String yaml) throws IOException {
+        store.importNetworkModule(player,kind,yaml);
+        if(Bukkit.isPrimaryThread()) {
+            Player online=Bukkit.getPlayer(player);
+            if(online!=null){
+                refresh(online);
+                RankStore.Sanction ban=store.get(player).ban();
+                if(ban!=null && ban.active(System.currentTimeMillis())) online.kick(Component.text(notice("Banned",ban)));
+            }
+        }
+    }
+    private void profileChanged(UUID player,String category) {
+        org.bukkit.plugin.Plugin network=Bukkit.getPluginManager().getPlugin("BlinkNetwork");
+        if(network==null || !network.isEnabled())return;
+        try { network.getClass().getMethod("profileChanged",UUID.class,String.class).invoke(network,player,category); }
+        catch(ReflectiveOperationException ex){getLogger().warning("BlinkNetwork rank sync unavailable: "+ex.getClass().getSimpleName());}
+    }
     private void persist(UUID id,Entry e) {
-        try { store.put(id,e); }
+        try { store.put(id,e);profileChanged(id,"ranks");profileChanged(id,"sanctions"); }
         catch(IOException ex) { getLogger().severe("Could not save player data: "+ex); throw new IllegalArgumentException("Save failed; action was not applied. Check disk space and console."); }
     }
     private void remember(Player p) {
