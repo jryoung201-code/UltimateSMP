@@ -71,7 +71,7 @@ class DatabaseTest {
         db.assign(r,B);
         UUID player=UUID.randomUUID(),session=UUID.randomUUID();
         db.claim(player,A,session,true);
-        byte[] snapshot=("version: 1\\ndimension: Overworld\\nx: "+(r.x()*144+12)+".0\\ny: 70.0\\nz: "+(r.z()*144+12)+".0\\n")
+        byte[] snapshot=("version: 1\ndimension: Overworld\nx: "+(r.x()*144+12)+".0\ny: 70.0\nz: "+(r.z()*144+12)+".0\n")
             .getBytes(java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(db.save(player,session,snapshot,true));
         assertEquals(B,db.loginTarget(player,db.route(player)));
