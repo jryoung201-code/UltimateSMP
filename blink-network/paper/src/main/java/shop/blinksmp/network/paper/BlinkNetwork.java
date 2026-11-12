@@ -22,6 +22,8 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->new Thread(r,"BlinkNetwork-DB"));
     private final AtomicBoolean refreshing=new AtomicBoolean();
     private volatile Map<Region,String> regions=Map.of();
+    private volatile Map<String,NetworkStore.Border> networkBorders=Map.of();
+    private long appliedBorderRevision=-1;
     private volatile Set<String> online=Set.of();
     private volatile long refreshed;
     private volatile boolean ready,active,stopping;
@@ -56,7 +58,19 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             getServer().getMessenger().registerOutgoingPluginChannel(this,Protocol.CHANNEL);
             io.execute(()->{try{db.verify();db.register(id);if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");refresh();ready=true;}catch(Exception e){problem("Startup failed; joins blocked",e);}});
             Bukkit.getScheduler().runTaskTimer(this,()->{
-                if(ready&&refreshing.compareAndSet(false,true))io.execute(()->{try{if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID");refresh();}catch(Exception e){ready=false;problem("Network unavailable; joins and transfers blocked",e);main(()->Bukkit.getOnlinePlayers().forEach(p->{Session s=sessions.get(p.getUniqueId());if(s!=null){s.frozen=true;p.kickPlayer("Network unavailable. Please reconnect later.");}}));}finally{refreshing.set(false);}});
+                if(refreshing.compareAndSet(false,true))io.execute(()->{
+                    try {
+                        if(!ready){db.verify();db.register(id);}
+                        if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");
+                        refresh();
+                        if(!ready)getLogger().info("BlinkNetwork reconnected and is ready.");
+                        ready=true;
+                    }catch(Exception e){
+                        boolean wasReady=ready;ready=false;
+                        problem(wasReady?"Network unavailable; joins and transfers blocked":"Network startup retry failed; will try again",e);
+                        if(wasReady)main(()->Bukkit.getOnlinePlayers().forEach(p->{Session s=sessions.get(p.getUniqueId());if(s!=null){s.frozen=true;p.kickPlayer("Network unavailable. Please reconnect later.");}}));
+                    }finally{refreshing.set(false);}
+                });
                 for(var row:sessions.entrySet()){Session s=row.getValue();if(!s.joined&&System.currentTimeMillis()-s.freezeAt>30_000&&sessions.remove(row.getKey(),s))releaseUnloaded(row.getKey(),s);}
                 for(Player p:Bukkit.getOnlinePlayers()) {
                     Session s=sessions.get(p.getUniqueId());
@@ -70,7 +84,24 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private String env(String key,String fallback){return System.getenv().getOrDefault(key,getConfig().getString(fallback,""));}
     private void refresh()throws Exception{
         Map<Region,String> next=db.assignments();Set<String> ok=new HashSet<>();for(String server:new HashSet<>(next.values()))if(db.ready(server))ok.add(server);
-        regions=next;online=Set.copyOf(ok);refreshed=System.currentTimeMillis();
+        Map<String,NetworkStore.Border> incomingBorders=db.borders();
+        regions=next;online=Set.copyOf(ok);networkBorders=incomingBorders;refreshed=System.currentTimeMillis();
+        NetworkStore.Border border=incomingBorders.get(dimension);
+        if(border!=null&&border.revision()!=appliedBorderRevision)main(()->applyWorldBorder(border));
+    }
+    private void applyWorldBorder(NetworkStore.Border border){
+        if(!ready&&stopping)return;
+        try {
+            WorldBorder wb=world.getWorldBorder();
+            // Set the size before moving its center so the final placement is always valid.
+            wb.setSize(border.enabled()?border.sizeBlocks():59_999_968);
+            wb.setCenter(border.enabled()?border.centerX():0,border.enabled()?border.centerZ():0);
+            appliedBorderRevision=border.revision();
+        }catch(Exception ex){problem("Could not apply network world border",ex);}
+    }
+    private boolean withinBorder(String targetDimension,double x,double z){
+        NetworkStore.Border border=networkBorders.get(targetDimension);
+        return border==null||border.contains(x,z);
     }
     private void main(Runnable task){if(!stopping&&isEnabled())Bukkit.getScheduler().runTask(this,task);}
     private void problem(String context,Exception e){getLogger().severe(context+" ("+e.getClass().getSimpleName()+"). See setup/troubleshooting documentation; credentials are not logged.");}
@@ -143,7 +174,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         });
     }
     private final Set<UUID> restoring=new HashSet<>();
-    private boolean owned(Location l){return !active||(l.getWorld()==world&&id.equals(regions.get(Region.at(dimension,l.getX(),l.getZ()))));}
+    private boolean owned(Location l){return !active||(l.getWorld()==world&&withinBorder(dimension,l.getX(),l.getZ())&&id.equals(regions.get(Region.at(dimension,l.getX(),l.getZ()))));}
     private boolean safe(Location l){return l.getY()>=world.getMinHeight()&&l.getY()<world.getMaxHeight()-1&&world.getWorldBorder().isInside(l)&&l.getBlock().isPassable()&&l.clone().add(0,1,0).getBlock().isPassable()&&l.getBlock().getType()!=Material.LAVA&&l.getBlock().getType()!=Material.FIRE;}
     private void restoreProfiles(Player p,Session s,boolean vanilla) throws Exception {
         if(profiles==null||!profiles.active())return;
@@ -217,7 +248,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         String owner;
         try{owner=regions.get(Region.at(targetDimension,x,z));}
         catch(IllegalArgumentException ex){return false;}
-        if(owner==null||owner.equals(id)||!online.contains(owner)||System.currentTimeMillis()-refreshed>15_000)return false;
+        if(!withinBorder(targetDimension,x,z)||owner==null||owner.equals(id)||!online.contains(owner)||System.currentTimeMillis()-refreshed>15_000)return false;
         Session s=sessions.get(p.getUniqueId());
         if(s==null||s.frozen||s.transferring)return false;
         transfer(p,s,owner,targetDimension,new Location(world,x,y,z,yaw,pitch));
@@ -282,6 +313,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(blocked(p)){e.setCancelled(true);return;}
         if(e.getTo()==null)return;
         if(e.getTo().getWorld()!=world){e.setCancelled(true);p.sendActionBar("This destination needs a network dimension route.");return;}
+        if(!withinBorder(dimension,e.getTo().getX(),e.getTo().getZ())){e.setCancelled(true);p.sendActionBar("You reached the "+dimension+" world border.");return;}
         Region to=Region.at(dimension,e.getTo().getX(),e.getTo().getZ());String owner=regions.get(to);
         if(id.equals(owner))return;
         e.setCancelled(true);
@@ -297,6 +329,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(blocked(e.getPlayer())){e.setCancelled(true);return;}
         Location to=e.getTo();if(to==null)return;
         String destDimension=switch(to.getWorld().getEnvironment()){case NETHER->"Nether";case THE_END->"End";default->"Overworld";};
+        if(!withinBorder(destDimension,to.getX(),to.getZ())){e.setCancelled(true);e.getPlayer().sendMessage("That destination is outside the "+destDimension+" world border.");return;}
         String owner=regions.get(Region.at(destDimension,to.getX(),to.getZ()));
         if(id.equals(owner)&&to.getWorld()==world)return;
         e.setCancelled(true);
