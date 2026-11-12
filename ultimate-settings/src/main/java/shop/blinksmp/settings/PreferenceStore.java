@@ -32,6 +32,26 @@ public final class PreferenceStore {
         state=Map.copyOf(loaded);
     }
     public Preferences get(UUID id) { return state.getOrDefault(id,Preferences.DEFAULT); }
+    public String exportNetworkModule(UUID player) {
+        YamlConfiguration y=new YamlConfiguration();y.set("version",1);
+        Preferences p=get(player);
+        for(String key:KEYS)y.set(key,p.value(key));
+        return y.saveToString();
+    }
+    public void importNetworkModule(UUID player,String payload) throws IOException {
+        if(payload.length()>131072)throw new IOException("Settings profile too large");
+        YamlConfiguration y=new YamlConfiguration();
+        try {
+            y.loadFromString(payload);
+            if(y.getInt("version")!=1)throw new IllegalArgumentException("Invalid settings profile version");
+            for(String key:KEYS)if(!y.isBoolean(key))throw new IllegalArgumentException("Invalid boolean setting: "+key);
+            put(player,new Preferences(y.getBoolean("booster"),y.getBoolean("rank-tags"),
+                y.getBoolean("players"),y.getBoolean("messages"),y.getBoolean("join-messages"),
+                y.getBoolean("coordinates"),y.getBoolean("exclude-monsters")));
+        }catch(org.bukkit.configuration.InvalidConfigurationException|RuntimeException ex){
+            throw new IOException("Invalid settings profile; old settings preserved",ex);
+        }
+    }
     public synchronized void put(UUID id,Preferences preferences) throws IOException {
         Map<UUID,Preferences> next=new HashMap<>(state); next.put(id,preferences);
         YamlConfiguration y=new YamlConfiguration();
