@@ -128,6 +128,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         PermissionAttachment a=p.addAttachment(this); attachments.put(id,a);
         for(String cmd:Rules.MINIMUM.keySet()) a.setPermission("ultimateranks.command."+cmd,Rules.allowed(r,cmd));
         a.setPermission("ultimateranks.staff",r.level>=Rank.HELPER.level);
+        grantHomePermission(a,r);
         for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),r==v);
         for(String perm:getConfig().getStringList("extra-permissions."+r.name())) a.setPermission(perm,true);
         if(!oldTabs.containsKey(id)) oldTabs.put(id,p.playerListName());
@@ -141,6 +142,9 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         p.updateCommands();
         if(settings!=null && settingsRefresh!=null) try { settingsRefresh.invoke(settings); }
         catch(ReflectiveOperationException ex) { getLogger().warning("Rank display refresh failed: "+ex); }
+    }
+    static void grantHomePermission(PermissionAttachment attachment,Rank rank) {
+        if(rank.homes>0) attachment.setPermission("maxhomes."+rank.homes,true);
     }
     private void updateVisibility(Player viewer) {
         for(UUID id:vanished) {
@@ -357,7 +361,8 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
     private void ranks(CommandSender s,String[] args) {
         if(args.length==0 || args[0].equalsIgnoreCase("list")) {
-            say(s,"OWNER > DEV > ADMIN > MOD > TRIAL MOD > HELPER > MEMBER");
+            say(s,"Staff: OWNER > DEV > ADMIN > MOD > TRIAL MOD > HELPER");
+            say(s,"Player ranks: MEMBER, Blink+ (3 homes), Blink++ (5 homes), Blink+++ (9 homes)");
             say(s,"/rank info [player] | /rank set <player> <rank> | /rank remove <player>"); return;
         }
         String sub=args[0].toLowerCase(Locale.ROOT);
@@ -460,7 +465,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         String action=command.getName(); int index=args.length-1; List<String> candidates=new ArrayList<>();
         if(action.equals("rank")) {
             if(index==0) candidates.addAll(console(s)||Rules.allowed(rank(s),"rank")?List.of("set","remove","info","list"):List.of("info","list"));
-            else if(index==2 && args[0].equalsIgnoreCase("set")) for(Rank r:Rank.values()) if(console(s)||rank(s).above(r)) candidates.add(r.name());
+            else if(index==2 && args[0].equalsIgnoreCase("set")) for(Rank r:Rank.values()) if(console(s)||rank(s).above(r)) candidates.add(r.homes>0?r.label():r.name());
             else if(index!=1 || args[0].equalsIgnoreCase("list")) return List.of();
         } else if(action.equals("staff") && index==0) candidates.addAll(Rules.MINIMUM.keySet().stream().filter(c->console(s)||Rules.allowed(rank(s),c)).toList());
         else {

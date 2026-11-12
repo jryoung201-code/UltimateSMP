@@ -5,6 +5,9 @@ prefixes:
   MOD: '&2&l[MOD] &r'
   TRIAL_MOD: '&e[TRIAL MOD] &r'
   HELPER: '&a[HELPER] &r'
+  BLINK_PLUS: '&b[Blink+] &r'
+  BLINK_PLUS_PLUS: '&d[Blink++] &r'
+  BLINK_PLUS_PLUS_PLUS: '&6[Blink+++] &r'
   MEMBER: '&7[MEMBER] &r'
 # These are exact-rank permissions, not inherited. Never grants OP or wildcard '*'.
 # Restart after editing this config.
@@ -15,4 +18,10 @@ extra-permissions:
   MOD: []
   TRIAL_MOD: []
   HELPER: []
+  BLINK_PLUS: []
+  BLINK_PLUS_PLUS: []
+  BLINK_PLUS_PLUS_PLUS: []
   MEMBER: []
+
+# Blink home limits (3/5/9) are built in and also apply with older configs.
+# Extra permissions are additive; another higher maxhomes.# permission still wins.

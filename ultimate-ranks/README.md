@@ -1,4 +1,4 @@
-# UltimateRanks 1.0.2
+# UltimateRanks 1.0.3
 
 Standalone Paper 1.21.11 / Java 21 plugin for UltimateSMP. No LuckPerms or client
 mod required. Java and Floodgate Bedrock players use the same rank system.
@@ -7,7 +7,7 @@ above-head nameplates are not modified. PLAYER UUIDs identify ranks and punishme
 
 ## Install and first OWNER
 
-1. Stop the server. Upload UltimateRanks-1.0.2.jar into plugins/ and start it.
+1. Stop the server. Upload UltimateRanks-1.0.3.jar into plugins/ and start it.
 2. Join the server once so your exact name and UUID are recorded.
 3. In the SERVER CONSOLE run `rank set YourExactName OWNER` (without `/`).
 4. In game run `/rank info` and `/staff` to check your rank and available tools.
@@ -34,6 +34,36 @@ allow up to 365d. All moderation targets must have a strictly lower rank; you ca
 heal/feed yourself. Staff cannot reverse or replace a punishment from a higher
 rank. Only console can reverse punishments issued by console. No permanent mute
 command is provided.
+
+## Blink player ranks and home limits
+
+| Rank | Built-in permission | Maximum homes |
+| --- | --- | ---: |
+| Blink+ | `maxhomes.3` | 3 |
+| Blink++ | `maxhomes.5` | 5 |
+| Blink+++ | `maxhomes.9` | 9 |
+
+Assign with `/rank set PlayerName Blink+`, `/rank set PlayerName Blink++`, or
+`/rank set PlayerName Blink+++`. Console uses the same commands without `/`.
+ADMIN and higher can assign these ranks to lower-ranked players. Names with
+pluses are accepted case-insensitively, appear in chat/TAB, and autocomplete.
+The stored names are `BLINK_PLUS`, `BLINK_PLUS_PLUS`, `BLINK_PLUS_PLUS_PLUS`;
+these are also the optional prefix/extra-permission config keys.
+
+These player ranks have the same moderation level as MEMBER and grant no staff
+commands, staff chat, or OP. This remains a single-rank system: assigning Blink+
+to a staff player replaces that staff rank; it is not a separate subscription slot.
+
+UltimateHomes (or another plugin that reads `maxhomes.#`) must be installed to
+provide home commands. Its highest true numeric permission wins, so a higher
+permission granted elsewhere can increase these limits. Changing/removing a rank
+refreshes this plugin's permission attachment immediately; a downgrade keeps
+existing homes but blocks extra new homes according to UltimateHomes' rules.
+
+Upgrade by stopping the server, replacing the old UltimateRanks JAR with
+UltimateRanks-1.0.3.jar, then restarting. Keep `players.yml` and `config.yml`.
+The built-in home grants and prefix fallbacks work with an existing config;
+no data reset, LuckPerms, or UltimateHomes update is required.
 
 ## Commands
 
@@ -97,7 +127,7 @@ visibility API. It suppresses public chat while active; use /sc. Building,
 interactions, pickup/drop and dealing/taking damage are blocked while vanished.
 It removes locally vanished players from the Paper Java ping count/sample and
 filters normal tab completions. It cannot guarantee concealment in independent
-plugins' web maps, custom lists, proxy lists or messages. With UltimateGUI 1.0.2,
+plugins' web maps, custom lists, proxy lists or messages. With UltimateGUI 1.0.3,
 the configured owner's /vanish delegates to the GUI's single persisted state;
 other staff keep session-only rank vanish. Update both plugins together. No fake join message is
 sent when toggling. Spectator mode restores on toggle-off, demotion, logout and
@@ -122,7 +152,7 @@ Run `mvn -f ultimate-ranks/pom.xml package` from the repository with JDK 21.
 The GitHub Actions ranks workflow compiles the plugin, runs authorization and
 duration checks, and tests data persistence, UUID identity, punishment expiry,
 corrupt-data rejection and failed-save behavior. The final JAR is an Actions
-artifact named UltimateRanks-1.0.2. No live Minecraft/Bedrock client test has
+artifact named UltimateRanks-1.0.3. No live Minecraft/Bedrock client test has
 been performed in this build environment.
 
 ## Personal rank tags with UltimateSettings

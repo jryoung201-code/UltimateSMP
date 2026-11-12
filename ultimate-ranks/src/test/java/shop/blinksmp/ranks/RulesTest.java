@@ -20,6 +20,21 @@ public final class RulesTest {
         check(!Rules.canReverse(Rank.MOD,Rank.MOD,Rank.HELPER.level),"Mod acted on peer");
         check(Rules.canReverse(Rank.ADMIN,Rank.MOD,Rank.MOD.level),"Admin should reverse mod action");
         check(!Rules.canReverse(Rank.OWNER,Rank.MEMBER,7),"Player reversed console action");
+        for(Rank premium:new Rank[]{Rank.BLINK_PLUS,Rank.BLINK_PLUS_PLUS,Rank.BLINK_PLUS_PLUS_PLUS}) {
+            check(Rank.parse(premium.label())==premium,"Display rank name must parse: "+premium);
+            check(Rank.parse(premium.label().toLowerCase(java.util.Locale.ROOT))==premium,"Case-insensitive plus rank");
+            check(Rank.parse(premium.name())==premium,"Stored rank name must parse");
+            check(premium.level==Rank.MEMBER.level,"Premium rank must remain at member level");
+            check(!premium.above(Rank.MEMBER)&&!Rank.MEMBER.above(premium),"Premium must not gain moderation priority over member");
+            for(String cmd:Rules.MINIMUM.keySet())check(!Rules.allowed(premium,cmd),"Premium staff escalation: "+cmd);
+            check(Rules.canAssign(Rank.ADMIN,Rank.MEMBER,premium),"Admin should be able to assign premium");
+        }
+        check(Rank.BLINK_PLUS.homes==3&&Rank.BLINK_PLUS_PLUS.homes==5&&Rank.BLINK_PLUS_PLUS_PLUS.homes==9,"Requested home limits");
+        for(Rank rank:Rank.values())if(rank.level>0||rank==Rank.MEMBER)check(rank.homes==0,"Existing ranks must keep their configured home permissions");
+        for(String invalid:new String[]{"Blink++++","Blink","BLINK_PLUS_PLUS_PLUS_PLUS"}) {
+            boolean rejected=false;try{Rank.parse(invalid);}catch(IllegalArgumentException ex){rejected=true;}
+            check(rejected,"Unknown subscription tier accepted");
+        }
         check(Rank.parse("OWER")==Rank.OWNER,"OWER alias");
         check(Rank.parse("trial mod")==Rank.TRIAL_MOD,"Space alias");
         check(Rank.parse("trial-mod")==Rank.TRIAL_MOD,"Hyphen alias");

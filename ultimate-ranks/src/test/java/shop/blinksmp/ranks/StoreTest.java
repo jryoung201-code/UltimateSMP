@@ -25,6 +25,16 @@ public final class StoreTest {
             check(third.get(id).rank()==Rank.ADMIN,"Rank update must persist");
             check(third.get(id).ban()==null,"Unban must persist");
             check(third.get(id).warnings().equals(List.of("warning")),"Unrelated history must survive");
+            // Added ranks survive restart without changing another player's sanctions or legacy rank.
+            for(Rank premium:new Rank[]{Rank.BLINK_PLUS,Rank.BLINK_PLUS_PLUS,Rank.BLINK_PLUS_PLUS_PLUS}) {
+                UUID subscriber=UUID.randomUUID();Entry entry=new Entry("Subscriber",premium,null,null,List.of());
+                third.put(subscriber,entry);RankStore reloaded=new RankStore(file);
+                check(reloaded.get(subscriber).equals(entry),"Premium must survive reload: "+premium);
+                check(reloaded.get(id).equals(third.get(id)),"Legacy player data must survive new premium entries");
+                reloaded.put(subscriber,reloaded.get(subscriber).ranked(Rank.MEMBER));
+                check(new RankStore(file).get(subscriber).rank()==Rank.MEMBER,"Premium removal must persist");
+                third=new RankStore(file);
+            }
             // Move the data directory away, then replace it with a regular file to force a save failure.
             Path archived=dir.resolveSibling(dir.getFileName()+"-moved");
             Files.move(dir,archived); Files.writeString(dir,"block writes");
