@@ -52,6 +52,20 @@ class DatabaseTest {
         UUID next=UUID.randomUUID();assertNull(db.claim(p,A,next,false));db.save(p,next,new byte[]{7},false);
         db.abandonEmpty(p,next);assertEquals("active",db.route(p).state());
     }
+    @Test void playerModulesAreVersionedAndConflictsDoNotOverwrite()throws Exception{
+        UUID player=UUID.randomUUID();
+        assertTrue(db.modules(player).isEmpty());
+        long v1=db.writeModule(player,"ranks",0,"MEMBER".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(1,v1);
+        assertArrayEquals("MEMBER".getBytes(java.nio.charset.StandardCharsets.UTF_8),db.modules(player).get("ranks").payload());
+        assertThrows(SQLException.class,()->db.writeModule(player,"ranks",0,"OWNER".getBytes()));
+        long v2=db.writeModule(player,"ranks",v1,"BLINK_PLUS".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        assertEquals(2,v2);
+        assertThrows(SQLException.class,()->db.writeModule(player,"ranks",1,"OWNER".getBytes()));
+        assertEquals("BLINK_PLUS",new String(db.modules(player).get("ranks").payload(),java.nio.charset.StandardCharsets.UTF_8));
+        assertThrows(IllegalArgumentException.class,()->db.writeModule(player,"economy",0,new byte[]{1}));
+        assertThrows(IllegalArgumentException.class,()->db.writeModule(player,"settings",0,new byte[2_097_153]));
+    }
     @Test void payloadBoundsRejectedBeforeWriting()throws Exception{
         UUID p=UUID.randomUUID(),s=UUID.randomUUID();db.claim(p,A,s,true);
         assertThrows(IllegalArgumentException.class,()->db.save(p,s,new byte[2097153],false));
