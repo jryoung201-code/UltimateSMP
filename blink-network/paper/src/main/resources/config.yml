@@ -19,3 +19,15 @@ database:
 # BLINK_NETWORK_JDBC_URL=jdbc:postgresql://HOST/DATABASE?sslmode=verify-full
 # BLINK_NETWORK_DB_USER=ROLE
 # BLINK_NETWORK_DB_PASSWORD=PASSWORD
+
+# Additive schema v2 must be applied on Neon before enabling profile sync.
+# All Paper backends must use the same choices. Disabled until plugin adapters are verified.
+profile-sync:
+  enabled: false
+  ranks: true
+  sanctions: true
+  homes: true
+  settings: true
+  advancements: false
+  statistics: true
+# Advancements are off by default: Bukkit criterion grants can trigger rewards.
