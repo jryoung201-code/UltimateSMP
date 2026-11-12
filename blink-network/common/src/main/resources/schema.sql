@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS blinksmp_network_v1.audit (
  at timestamptz NOT NULL DEFAULT now(), action text NOT NULL, detail text NOT NULL
 );
 
--- Additive profile synchronization table; run this migration while the network is stopped.
+-- Additive profile synchronization table. Run this migration while the network is stopped.
 -- Sanctions are deliberately separate from rank assignment for selective updates.
 CREATE TABLE IF NOT EXISTS blinksmp_network_v1.player_modules (
  player_id uuid NOT NULL,
