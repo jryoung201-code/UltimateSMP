@@ -73,6 +73,25 @@ final class VanillaProfiles {
         } else if(category.equals("statistics")){
             ConfigurationSection statistics=y.getConfigurationSection("statistics");
             if(statistics==null)throw new IOException("Invalid statistics profile");
+            // Absent counters mean zero. Clear counters from an older local server copy
+            // instead of silently carrying them into this authoritative network profile.
+            YamlConfiguration old=new YamlConfiguration();
+            try {old.loadFromString(export(p,"statistics")); }
+            catch(org.bukkit.configuration.InvalidConfigurationException ex){throw new IOException("Cannot inspect old statistics",ex);}
+            ConfigurationSection previous=old.getConfigurationSection("statistics");
+            if(previous!=null)for(String name:previous.getKeys(false)){
+                ConfigurationSection entries=previous.getConfigurationSection(name);
+                if(entries==null)continue;
+                Statistic stat=Statistic.valueOf(name);
+                for(String qualifier:entries.getKeys(false)){
+                    if(statistics.isSet(name+"."+qualifier))continue;
+                    switch(stat.getType()){
+                        case UNTYPED -> p.setStatistic(stat,0);
+                        case BLOCK,ITEM -> p.setStatistic(stat,Material.valueOf(qualifier),0);
+                        case ENTITY -> p.setStatistic(stat,EntityType.valueOf(qualifier),0);
+                    }
+                }
+            }
             for(String name:statistics.getKeys(false)){
                 Statistic stat=Statistic.valueOf(name);
                 ConfigurationSection entries=statistics.getConfigurationSection(name);
