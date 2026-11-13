@@ -24,7 +24,7 @@ final class PlayerSnapshot {
         GameMode.valueOf(y.getString("gamemode",""));
         inventory=ItemStack.deserializeItemsFromBytes(Base64.getDecoder().decode(y.getString("inventory","")));
         ender=ItemStack.deserializeItemsFromBytes(Base64.getDecoder().decode(y.getString("ender","")));
-        if(inventory.length!=41||ender.length!=27)throw new IllegalArgumentException("Wrong inventory size");
+        InventoryLayout.validate(inventory.length,ender.length);
         effects=new ArrayList<>();
         var section=y.getConfigurationSection("effects");
         if(section!=null)for(String key:section.getKeys(false)) {
@@ -55,7 +55,7 @@ final class PlayerSnapshot {
     String dimension(){return yaml.getString("dimension");}
     void apply(Player p){
         p.setGameMode(GameMode.valueOf(yaml.getString("gamemode")));
-        p.getInventory().setContents(inventory);p.getEnderChest().setContents(ender);p.getInventory().setHeldItemSlot(yaml.getInt("slot"));
+        p.getInventory().setContents(InventoryLayout.adapt(inventory,p.getInventory().getSize()));p.getEnderChest().setContents(ender);p.getInventory().setHeldItemSlot(yaml.getInt("slot"));
         for(PotionEffect e:List.copyOf(p.getActivePotionEffects()))p.removePotionEffect(e.getType());p.addPotionEffects(effects);
         double max=Objects.requireNonNull(p.getAttribute(Attribute.MAX_HEALTH)).getValue();
         p.setHealth(yaml.getBoolean("dead")?max:Math.min(yaml.getDouble("health"),max));

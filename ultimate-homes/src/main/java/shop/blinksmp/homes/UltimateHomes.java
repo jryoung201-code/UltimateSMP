@@ -29,9 +29,9 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         @Override public Inventory getInventory() { return inventory; }
     }
     private static final class Trip {
-        final Player player;final Home home;final Location origin,destination;final long due;
+        final Player player;final Home home;final Location origin,destination;final long due;final boolean remote;
         boolean loading;long loadDeadline;int lastSeconds=-1;
-        Trip(Player p,Home h,Location destination,int delay) { player=p;home=h;origin=p.getLocation().clone();this.destination=destination.clone();due=System.nanoTime()+delay*1_000_000_000L; }
+        Trip(Player p,Home h,Location destination,int delay,boolean remote) { player=p;home=h;origin=p.getLocation().clone();this.destination=destination.clone();this.remote=remote;due=System.nanoTime()+delay*1_000_000_000L; }
     }
     private HomeStore store;
     private final Map<UUID,Trip> trips=new HashMap<>();
@@ -45,6 +45,43 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         for(String name:List.of("home","sethome","delhome","homecancel")) Objects.requireNonNull(getCommand(name)).setTabCompleter(this);
         Bukkit.getPluginManager().registerEvents(this,this);timer=Bukkit.getScheduler().runTaskTimer(this,this::pulse,5,5);
         getLogger().info("UltimateHomes ready. Home limits use the highest granted maxhomes.<number> permission.");
+    }
+    public String exportNetworkModule(UUID player,String kind) throws IOException {
+        if(!kind.equals("homes"))throw new IllegalArgumentException("Not a homes module");
+        return store.exportNetworkModule(player);
+    }
+    public void importNetworkModule(UUID player,String kind,String yaml) throws IOException {
+        if(!kind.equals("homes"))throw new IllegalArgumentException("Not a homes module");
+        store.importNetworkModule(player,yaml);
+        Trip pending=trips.get(player);
+        if(pending!=null)cancel(player,"Home changed on another server; teleport cancelled.");
+    }
+    private void profileChanged(UUID player) {
+        org.bukkit.plugin.Plugin network=Bukkit.getPluginManager().getPlugin("BlinkNetwork");
+        if(network==null || !network.isEnabled())return;
+        try{network.getClass().getMethod("profileChanged",UUID.class,String.class).invoke(network,player,"homes");}
+        catch(ReflectiveOperationException ex){getLogger().warning("BlinkNetwork home sync unavailable: "+ex.getClass().getSimpleName());}
+    }
+    private org.bukkit.plugin.Plugin network() {
+        org.bukkit.plugin.Plugin plugin=Bukkit.getPluginManager().getPlugin("BlinkNetwork");
+        return plugin!=null && plugin.isEnabled()?plugin:null;
+    }
+    private World networkHomeWorld(String dimension) {
+        var plugin=network();if(plugin==null)return null;
+        try{return (World)plugin.getClass().getMethod("localHomeWorld",String.class).invoke(plugin,dimension);}
+        catch(ReflectiveOperationException ex){return null;}
+    }
+    private boolean networkRemote(Home h) {
+        var plugin=network();if(plugin==null)return false;
+        try{return (Boolean)plugin.getClass().getMethod("isHomeRemote",String.class,double.class,double.class)
+            .invoke(plugin,h.dimension(),h.x(),h.z());}
+        catch(ReflectiveOperationException ex){return false;}
+    }
+    private boolean networkHomeTeleport(Player p,Home h) {
+        var plugin=network();if(plugin==null)return false;
+        try{return (Boolean)plugin.getClass().getMethod("networkHomeTeleport",Player.class,String.class,double.class,double.class,double.class,float.class,float.class)
+            .invoke(plugin,p,h.dimension(),h.x(),h.y(),h.z(),h.yaw(),h.pitch());}
+        catch(ReflectiveOperationException ex){getLogger().warning("Network home transfer failed: "+ex.getClass().getSimpleName());return false;}
     }
     private void say(CommandSender sender,String text) { sender.sendMessage(Component.text("[Homes] ",NamedTextColor.GOLD).append(Component.text(text,NamedTextColor.YELLOW))); }
     private int limit(Player p) {
@@ -74,7 +111,7 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
                 case "delhome" -> {
                     if(args.length==0) { say(p,"Usage: /delhome <name>");return true; }
                     String name=HomeLimits.name(args[0]);
-                    if(store.delete(p.getUniqueId(),name)) { cancelIfHome(p,name);say(p,"Deleted home '"+name+"'."); }
+                    if(store.delete(p.getUniqueId(),name)) { profileChanged(p.getUniqueId());cancelIfHome(p,name);say(p,"Deleted home '"+name+"'."); }
                     else say(p,"Home not found.");
                 }
             }
@@ -86,8 +123,9 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
     private void save(Player p,String rawName) throws IOException {
         if(p.isDead() || p.isSleeping() || p.isInsideVehicle()) throw new IllegalArgumentException("Be alive, awake and outside a vehicle to set a home.");
         String name=HomeLimits.name(rawName);Location l=p.getLocation();
-        Home h=new Home(name,p.getWorld().getUID(),p.getWorld().getName(),l.getX(),l.getY(),l.getZ(),l.getYaw(),l.getPitch());
-        store.put(p.getUniqueId(),h,limit(p));cancelIfHome(p,name);
+        String homeDimension=switch(p.getWorld().getEnvironment()){case NETHER->"Nether";case THE_END->"End";default->"Overworld";};
+        Home h=new Home(name,p.getWorld().getUID(),p.getWorld().getName(),homeDimension,l.getX(),l.getY(),l.getZ(),l.getYaw(),l.getPitch());
+        store.put(p.getUniqueId(),h,limit(p));profileChanged(p.getUniqueId());cancelIfHome(p,name);
         say(p,"Saved home '"+name+"' ("+store.homes(p.getUniqueId()).size()+"/"+limit(p)+").");
     }
     private ItemStack icon(Material material,String title,String... lore) {
@@ -145,7 +183,7 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
                     else if(slot==15) confirmDelete(p,m.home);
                     else if(slot==22) list(p,0);
                 } else if(m.view==View.DELETE) {
-                    if(slot==11) { checkSnapshot(p,m.home);store.delete(p.getUniqueId(),m.home.name());cancelIfHome(p,m.home.name());say(p,"Deleted home '"+m.home.name()+"'.");list(p,0); }
+                    if(slot==11) { checkSnapshot(p,m.home);store.delete(p.getUniqueId(),m.home.name());profileChanged(p.getUniqueId());cancelIfHome(p,m.home.name());say(p,"Deleted home '"+m.home.name()+"'.");list(p,0); }
                     else if(slot==15) actions(p,m.home);
                 }
             } catch(IllegalArgumentException ex) { say(p,ex.getMessage()); }
@@ -158,8 +196,13 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
     private void begin(Player p,Home h) throws IOException {
         checkSnapshot(p,h);if(!available(p)) throw new IllegalArgumentException("Be alive, awake, outside vehicles and without passengers to teleport.");
         if(trips.containsKey(p.getUniqueId())) throw new IllegalArgumentException("A home teleport is already pending. Use /homecancel first.");
-        World world=Bukkit.getWorld(h.world());if(world==null) throw new IllegalArgumentException("That home's world is not loaded or no longer exists.");
-        Location destination=new Location(world,h.x(),h.y(),h.z(),h.yaw(),h.pitch());Trip trip=new Trip(p,h,destination,delay);trips.put(p.getUniqueId(),trip);
+        World world=Bukkit.getWorld(h.world());
+        World networkWorld=networkHomeWorld(h.dimension());
+        if(networkWorld!=null)world=networkWorld;
+        boolean remote=networkRemote(h);
+        if(world==null && remote)world=p.getWorld(); // Placeholder only; remote destination is routed by BlinkNetwork.
+        if(world==null)throw new IllegalArgumentException("That home's dimension has no network destination.");
+        Location destination=new Location(world,h.x(),h.y(),h.z(),h.yaw(),h.pitch());Trip trip=new Trip(p,h,destination,delay,remote);trips.put(p.getUniqueId(),trip);
         say(p,"Teleporting to '"+h.name()+"' in "+delay+" seconds. Stay still; /homecancel cancels.");
         if(delay==0) load(trip);
     }
@@ -175,7 +218,17 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         }
     }
     private void load(Trip t) {
-        if(trips.get(t.player.getUniqueId())!=t) return;t.loading=true;t.loadDeadline=System.nanoTime()+30_000_000_000L;t.player.sendActionBar(Component.text("Loading home...",NamedTextColor.GOLD));
+        if(trips.get(t.player.getUniqueId())!=t) return;
+        if(t.remote){
+            try {
+                checkSnapshot(t.player,t.home);
+                if(!available(t.player)||moved(t)) { cancel(t.player.getUniqueId(),"Home transfer cancelled.");return; }
+                trips.remove(t.player.getUniqueId());t.player.sendActionBar(Component.empty());
+                if(!networkHomeTeleport(t.player,t.home))say(t.player,"Home's network server is unavailable.");
+            }catch(IOException ex){cancel(t.player.getUniqueId(),"Home data unavailable.");failure(t.player,ex);}
+            return;
+        }
+        t.loading=true;t.loadDeadline=System.nanoTime()+30_000_000_000L;t.player.sendActionBar(Component.text("Loading home...",NamedTextColor.GOLD));
         World world=t.destination.getWorld();
         if(world==null || Bukkit.getWorld(world.getUID())!=world) { cancel(t.player.getUniqueId(),"The home's world is no longer available.");return; }
         if(t.destination.getY()<=world.getMinHeight() || t.destination.getY()+1.8>=world.getMaxHeight() || !world.getWorldBorder().isInside(t.destination)) { cancel(t.player.getUniqueId(),"Home is outside the world's safe height or border.");return; }

@@ -19,3 +19,30 @@ database:
 # BLINK_NETWORK_JDBC_URL=jdbc:postgresql://HOST/DATABASE?sslmode=verify-full
 # BLINK_NETWORK_DB_USER=ROLE
 # BLINK_NETWORK_DB_PASSWORD=PASSWORD
+
+# Additive schema v2 must be applied on Neon before enabling profile sync.
+# All Paper backends must use the same choices. Disabled until plugin adapters are verified.
+profile-sync:
+  enabled: false
+  # Temporarily true ONLY on the original bootstrap server for a one-time import
+  # of existing locally stored player ranks, homes and settings when Neon has no module.
+  seed-missing-from-local: false
+  ranks: true
+  sanctions: true
+  homes: true
+  settings: true
+  advancements: false
+  statistics: true
+# Advancements are off by default: Bukkit criterion grants can trigger rewards.
+
+# A private, non-blocking particle wall at the edge of your own server's regions.
+# Cyan: another server. Red: unassigned region. Nothing is placed in the world.
+particle-border:
+  enabled: true
+  interval-ticks: 10
+  distance: 24
+  horizontal-spacing: 3
+  vertical-spacing: 2
+  height: 8
+  server-color: '#33CCFF'
+  unassigned-color: '#FF5555'

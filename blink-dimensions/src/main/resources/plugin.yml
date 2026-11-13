@@ -1,0 +1,16 @@
+name: BlinkDimensions
+version: 0.1.0
+main: shop.blinksmp.dimensions.BlinkDimensions
+api-version: '1.21.11'
+author: RealJR_25736
+description: Dimension-only portals using BlinkNetwork safe inventory handoffs
+depend: [BlinkNetwork]
+commands:
+  blinkdimensions:
+    description: Status, verify configured dimension hubs, and admin transfer
+    usage: /blinkdimensions [status|check <dimension>|travel <dimension>|reload]
+    permission: blinkdimensions.admin
+    aliases: [bdim]
+permissions:
+  blinkdimensions.admin:
+    default: op
