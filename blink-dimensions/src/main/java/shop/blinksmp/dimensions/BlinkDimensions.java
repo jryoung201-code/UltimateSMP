@@ -119,7 +119,7 @@ public final class BlinkDimensions extends JavaPlugin implements Listener, Comma
         ConfigurationSection section = getConfig().getConfigurationSection("arrivals." + dim);
         if (section == null || !section.getBoolean("enabled", false)) return null;
         for (String field : new String[]{"x", "y", "z", "yaw", "pitch"})
-            if (!section.isSet(field) || !section.isNumber(field)) return null;
+            if (!(section.get(field) instanceof Number)) return null;
         double x = section.getDouble("x"), y = section.getDouble("y"), z = section.getDouble("z");
         float yaw = (float) section.getDouble("yaw"), pitch = (float) section.getDouble("pitch");
         if (!Double.isFinite(x) || !Double.isFinite(y) || !Double.isFinite(z)
