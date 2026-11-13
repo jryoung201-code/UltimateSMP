@@ -1,0 +1,30 @@
+# Paper 1.21.11 / Java 21. Install on ALL Paper backends with BlinkNetwork 0.2.4+.
+# No Velocity JAR, database URL, or credentials are required for BlinkDimensions.
+enabled: true
+portal-cooldown-seconds: 15
+
+# Build and INSPECT safe, two-block-high arrival pads BEFORE setting enabled=true.
+# Landing directly inside a portal, lava, solid terrain or unassigned territory is unsafe.
+# These hubs intentionally do not scale Nether X/Z 1:8 or automatically build portals.
+arrivals:
+  Overworld:
+    enabled: false
+    x: 0.5
+    y: 80.0
+    z: 0.5
+    yaw: 0.0
+    pitch: 0.0
+  Nether:
+    enabled: false
+    x: 0.5
+    y: 75.0
+    z: 0.5
+    yaw: 0.0
+    pitch: 0.0
+  End:
+    enabled: false
+    x: 100.5
+    y: 65.0
+    z: 0.5
+    yaw: 0.0
+    pitch: 0.0

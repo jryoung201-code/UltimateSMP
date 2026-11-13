@@ -339,8 +339,12 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             transfer(p,s,owner,dimension,e.getTo());
         }
     }
-    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void portal(PlayerPortalEvent e){teleport(e);}
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void portal(PlayerPortalEvent e){if(dimensionPluginHandles(e))return;teleport(e);}
+    /** API marker required by BlinkDimensions to prevent old-version double transfers. */
+    public boolean delegatesPortalsToBlinkDimensions(){return true;}
+    private boolean dimensionPluginHandles(PlayerPortalEvent e){return Bukkit.getPluginManager().isPluginEnabled("BlinkDimensions") && (e.getCause()==PlayerTeleportEvent.TeleportCause.NETHER_PORTAL || e.getCause()==PlayerTeleportEvent.TeleportCause.END_PORTAL);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void teleport(PlayerTeleportEvent e){
+        if(e instanceof PlayerPortalEvent portalEvent && dimensionPluginHandles(portalEvent))return;
         if(!active||restoring.contains(e.getPlayer().getUniqueId()))return;
         if(blocked(e.getPlayer())){e.setCancelled(true);return;}
         Location to=e.getTo();if(to==null)return;
@@ -438,7 +442,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void command(PlayerCommandPreprocessEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void chat(AsyncChatEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.3: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.4: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         String[] a=args.clone();io.execute(()->{try{
