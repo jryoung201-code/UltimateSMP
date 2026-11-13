@@ -1,5 +1,5 @@
 name: BlinkNetwork
-version: 0.2.3
+version: 0.2.4
 main: shop.blinksmp.network.paper.BlinkNetwork
 api-version: '1.21.11'
 author: RealJR_25736

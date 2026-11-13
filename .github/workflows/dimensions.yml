@@ -1,0 +1,29 @@
+name: Build BlinkDimensions
+on:
+  push:
+    paths: ['blink-dimensions/**', 'blink-network/**', '.github/workflows/dimensions.yml']
+  pull_request:
+    paths: ['blink-dimensions/**', 'blink-network/**', '.github/workflows/dimensions.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build and test dimension-only plugin
+        run: mvn -B -ntp -f blink-dimensions/pom.xml verify
+      - if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: BlinkDimensions-0.1.0
+          path: |
+            blink-dimensions/target/BlinkDimensions-0.1.0.jar
+            blink-dimensions/README.md
+          if-no-files-found: error
