@@ -13,6 +13,9 @@ public final class HomeLimitsTest {
         check(HomeLimits.resolve(Map.of("maxhomes.9999",true),1000)==1000,"Server cap");
         check(HomeLimits.resolve(Map.of("maxhomes.1",false,"maxhomes.0",true),1000)==0,"Deny default allows zero limit");
         check(HomeLimits.resolve(Map.of("other.maxhomes.9",true,"maxhomes.9.extra",true),1000)==0,"Only exact numeric nodes");
+        check(HomeLimits.resolve(Map.of("maxhomes.unlimited",true,"maxhomes.1",true),1)==HomeLimits.UNLIMITED,"Unlimited bypasses numeric cap");
+        check(HomeLimits.resolve(Map.of("maxhomes.unlimited",false,"maxhomes.3",true),100)==3,"Denied unlimited is ignored");
+        check(HomeLimits.label(HomeLimits.UNLIMITED).equals("Unlimited"),"Readable unlimited GUI label");
         check(HomeLimits.name("My_Base-2").equals("my_base-2"),"Names normalized");
         for(String name:new String[]{"../test","a.b","hello world","", "x".repeat(25),"a/b","a:b"}) {
             try { HomeLimits.name(name);throw new AssertionError("Invalid name accepted"); } catch(IllegalArgumentException expected) { checks++; }
@@ -20,3 +23,4 @@ public final class HomeLimitsTest {
         System.out.println("PASS: "+checks+" numeric limits, explicit denials, cap and home-name checks");
     }
 }
+

@@ -27,3 +27,4 @@ public final class MonsterSpawnPolicyTest {
         System.out.println("PASS: "+checks+" monster-only, natural-only, overlap and player-range checks");
     }
 }
+

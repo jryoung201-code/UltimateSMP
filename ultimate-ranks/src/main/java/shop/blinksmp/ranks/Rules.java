@@ -42,3 +42,4 @@ public final class Rules {
     }
     public static long maxTempban(Rank rank) { return rank==Rank.MOD ? 7L*86400000 : 365L*86400000; }
 }
+

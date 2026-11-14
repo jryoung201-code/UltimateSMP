@@ -1,5 +1,5 @@
 name: UltimateRanks
-version: 1.0.3
+version: 1.2.1
 softdepend: [UltimateSettings]
 main: shop.blinksmp.ranks.UltimateRanks
 api-version: '1.21.11'
@@ -121,4 +121,5 @@ permissions:
     default: false
   ultimateranks.staff:
     default: false
+
 

@@ -24,11 +24,13 @@ jobs:
         run: mvn --batch-mode --no-transfer-progress package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
       - name: Verify settings
         run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.settings.RankDisplayTest
           java -cp target/classes:target/test-classes shop.blinksmp.settings.MonsterSpawnPolicyTest
           java -cp target/classes:target/test-classes shop.blinksmp.settings.PreferencesTest
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.settings.PreferenceStoreTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateSettings-1.0.1
-          path: ultimate-settings/target/UltimateSettings-1.0.1.jar
+          name: UltimateSettings-1.1.0
+          path: ultimate-settings/target/UltimateSettings-1.1.0.jar
           if-no-files-found: error
+

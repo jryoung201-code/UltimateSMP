@@ -28,6 +28,7 @@ jobs:
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.homes.HomeStoreTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateHomes-1.0.0
-          path: ultimate-homes/target/UltimateHomes-1.0.0.jar
+          name: UltimateHomes-1.1.0
+          path: ultimate-homes/target/UltimateHomes-1.1.0.jar
           if-no-files-found: error
+

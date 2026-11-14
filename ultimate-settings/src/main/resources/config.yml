@@ -6,3 +6,4 @@ booster:
 # Existing custom scoreboards/main-scoreboard teams and objectives are preserved.
 # Set false if another tab/nametag plugin manages all rank presentation.
 manage-rank-scoreboards: true
+

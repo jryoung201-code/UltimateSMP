@@ -29,3 +29,4 @@ public record Preferences(boolean booster, boolean rankTags, boolean players,
         return Math.max(2,Math.min(Math.min(configured,world),previous));
     }
 }
+

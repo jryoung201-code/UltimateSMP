@@ -26,7 +26,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
     private final Map<UUID,Scoreboard> boards=new HashMap<>(), previousBoards=new HashMap<>();
     private final Map<UUID,Long> clicked=new HashMap<>();
     private Plugin ranks;
-    private Method rankName,rankPrefix;
+    private Method rankName,rankPrefix,rankWeight;
     private int chunkCap;
     private boolean manageBoards;
     private int elapsed;
@@ -75,15 +75,22 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
     private Preferences preferences(Player p) { return store.get(p.getUniqueId()); }
     private void say(CommandSender to,String text) { to.sendMessage(Component.text("[Settings] "+text)); }
     private void bindRanks() {
-        ranks=Bukkit.getPluginManager().getPlugin("UltimateRanks"); rankName=rankPrefix=null;
+        ranks=Bukkit.getPluginManager().getPlugin("UltimateRanks"); rankName=rankPrefix=rankWeight=null;
         if(ranks==null || !ranks.isEnabled()) { ranks=null; return; }
         try { rankName=ranks.getClass().getMethod("getRankName",UUID.class); rankPrefix=ranks.getClass().getMethod("getRankPrefix",UUID.class); }
         catch(ReflectiveOperationException ex) { ranks=null; getLogger().warning("Rank display toggles require UltimateRanks 1.0.1 or newer."); }
+        if(ranks!=null)try{rankWeight=ranks.getClass().getMethod("getRankWeight",UUID.class);}catch(NoSuchMethodException ignored){}
     }
     private String rankValue(Method method,Player p,String fallback) {
         if(ranks==null || method==null) return fallback;
         try { return (String)method.invoke(ranks,p.getUniqueId()); }
         catch(ReflectiveOperationException ex) { return fallback; }
+    }
+    private int rankWeight(Player target) {
+        if(rankWeight!=null)try{return ((Number)rankWeight.invoke(ranks,target.getUniqueId())).intValue();}
+        catch(ReflectiveOperationException | ClassCastException ignored){}
+        int old=RANKS.indexOf(rankValue(rankName,target,"MEMBER"));
+        return old<0?0:(RANKS.size()-1-old)*100;
     }
     private void rebuildBoard(Player viewer) {
         UUID id=viewer.getUniqueId();
@@ -97,11 +104,14 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
             previousBoards.put(id,viewer.getScoreboard());
             mine=Bukkit.getScoreboardManager().getNewScoreboard(); boards.put(id,mine); viewer.setScoreboard(mine);
         }
+        Map<String,Integer> weightedRanks=new HashMap<>();
+        for(Player target:Bukkit.getOnlinePlayers())weightedRanks.put(rankValue(rankName,target,"MEMBER"),rankWeight(target));
+        Map<String,String> rankKeys=RankDisplay.keys(weightedRanks);
         Set<String> onlineNames=new HashSet<>();
         for(Player target:Bukkit.getOnlinePlayers()) {
             onlineNames.add(target.getName());
-            String rank=rankValue(rankName,target,"MEMBER"); int order=RANKS.indexOf(rank); if(order<0) order=6;
-            String key="us"+order; Team team=mine.getTeam(key);
+            String rank=rankValue(rankName,target,"MEMBER");
+            String key=rankKeys.get(rank); Team team=mine.getTeam(key);
             if(team==null) { team=mine.registerNewTeam(key); team.setCanSeeFriendlyInvisibles(false); team.setAllowFriendlyFire(true); }
             Component prefix=showRankTags(id)?LEGACY.deserialize(rankValue(rankPrefix,target,"")):Component.empty();
             // Prefix may be configured per rank; all members of this team have the same rank.
@@ -109,7 +119,10 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
             Team current=mine.getEntryTeam(target.getName());
             if(current!=team) team.addEntry(target.getName());
         }
-        for(Team team:mine.getTeams()) for(String name:new HashSet<>(team.getEntries())) if(!onlineNames.contains(name)) team.removeEntry(name);
+        for(Team team:mine.getTeams()) {
+            for(String name:new HashSet<>(team.getEntries()))if(!onlineNames.contains(name))team.removeEntry(name);
+            if(team.getEntries().isEmpty())team.unregister();
+        }
     }
     private void refreshBoards() { for(Player p:Bukkit.getOnlinePlayers()) rebuildBoard(p); }
     private void releaseBoard(Player p) {
@@ -281,6 +294,7 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         if(e.getPlugin().getName().equals("UltimateRanks")) { bindRanks(); refreshBoards(); }
     }
     @EventHandler public void disabled(PluginDisableEvent e) {
-        if(e.getPlugin()==ranks) { ranks=null; rankName=rankPrefix=null; for(Player p:Bukkit.getOnlinePlayers()) releaseBoard(p); }
+        if(e.getPlugin()==ranks) { ranks=null; rankName=rankPrefix=rankWeight=null; for(Player p:Bukkit.getOnlinePlayers()) releaseBoard(p); }
     }
 }
+

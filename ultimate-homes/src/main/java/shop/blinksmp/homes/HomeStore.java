@@ -29,9 +29,11 @@ public final class HomeStore {
     }
     private final Path directory;
     private final Map<UUID,SortedMap<String,Home>> cache=new HashMap<>();
+    private final Map<UUID,Integer> overrides=new HashMap<>();
     public HomeStore(Path directory) throws IOException { this.directory=directory;Files.createDirectories(directory); }
     public SortedMap<String,Home> homes(UUID id) throws IOException {
         SortedMap<String,Home> map=cache.get(id);if(map!=null) return Collections.unmodifiableSortedMap(map);
+        Integer override=null;
         TreeMap<String,Home> loaded=new TreeMap<>();Path path=directory.resolve(id+".yml");
         if(Files.exists(path)) {
             if(Files.size(path)>2_000_000) throw new IOException("Home data file is too large; file preserved.");
@@ -39,6 +41,7 @@ public final class HomeStore {
             try {
                 yaml.loadFromString(Files.readString(path,StandardCharsets.UTF_8));
                 if(yaml.getInt("version")!=1 || !id.toString().equals(yaml.getString("owner"))) throw new IllegalArgumentException("Wrong home file version/owner");
+                override=readOverride(yaml);
                 ConfigurationSection section=yaml.getConfigurationSection("homes");
                 if(section==null || section.getKeys(false).size()>10000) throw new IllegalArgumentException("Invalid homes section");
                 for(String key:section.getKeys(false)) {
@@ -50,19 +53,34 @@ public final class HomeStore {
                 }
             } catch(InvalidConfigurationException|RuntimeException ex) { throw new IOException("Cannot read home data; original file preserved",ex); }
         }
+        if(override!=null)overrides.put(id,override);else overrides.remove(id);
         cache.put(id,loaded);return Collections.unmodifiableSortedMap(loaded);
+    }
+    private static Integer readOverride(YamlConfiguration yaml) {
+        if(!yaml.contains("max-homes-override"))return null;
+        if(!yaml.isInt("max-homes-override") || yaml.getInt("max-homes-override")<0)
+            throw new IllegalArgumentException("Invalid home limit override");
+        return yaml.getInt("max-homes-override");
+    }
+    public Integer override(UUID id) throws IOException { homes(id);return overrides.get(id); }
+    public void setOverride(UUID id,Integer limit) throws IOException {
+        if(limit!=null && limit<0)throw new IllegalArgumentException("Home limit cannot be negative");
+        save(id,homes(id),limit);
     }
     public Home get(UUID id,String name) throws IOException { return homes(id).get(HomeLimits.name(name)); }
     public void put(UUID id,Home home,int limit) throws IOException {
         TreeMap<String,Home> copy=new TreeMap<>(homes(id));
-        if(!copy.containsKey(home.name()) && copy.size()>=limit) throw new IllegalArgumentException("Home limit reached ("+copy.size()+"/"+limit+"). Delete a home or ask staff for a higher maxhomes permission.");
+        if(!copy.containsKey(home.name()) && copy.size()>=limit) throw new IllegalArgumentException("Home limit reached ("+copy.size()+"/"+HomeLimits.label(limit)+"). Delete a home or ask staff for a higher maxhomes permission.");
         copy.put(home.name(),home);save(id,copy);
     }
     public boolean delete(UUID id,String name) throws IOException {
         TreeMap<String,Home> copy=new TreeMap<>(homes(id));if(copy.remove(HomeLimits.name(name))==null) return false;save(id,copy);return true;
     }
-    private void save(UUID id,SortedMap<String,Home> homes) throws IOException {
+    private void save(UUID id,SortedMap<String,Home> homes) throws IOException { save(id,homes,overrides.get(id)); }
+    private void save(UUID id,SortedMap<String,Home> homes,Integer override) throws IOException {
+        if(homes.size()>10000)throw new IOException("Home storage exceeds the safe file entry limit");
         YamlConfiguration yaml=new YamlConfiguration();yaml.set("version",1);yaml.set("owner",id.toString());yaml.createSection("homes");
+        if(override!=null)yaml.set("max-homes-override",override);
         for(Home h:homes.values()) {
             String key="homes."+h.name()+".";yaml.set(key+"world",h.world().toString());yaml.set(key+"world-name",h.worldName());yaml.set(key+"dimension",h.dimension());
             yaml.set(key+"x",h.x());yaml.set(key+"y",h.y());yaml.set(key+"z",h.z());yaml.set(key+"yaw",h.yaw());yaml.set(key+"pitch",h.pitch());
@@ -77,12 +95,15 @@ public final class HomeStore {
             try { Files.move(temp,destination,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING); }
             catch(AtomicMoveNotSupportedException ex) { throw new IOException("Atomic home-data replacement is unsupported; previous file preserved",ex); }
             cache.put(id,new TreeMap<>(homes));
+            if(override!=null)overrides.put(id,override);else overrides.remove(id);
         } finally { Files.deleteIfExists(temp); }
     }
     public String exportNetworkModule(UUID id) throws IOException {
         YamlConfiguration y=new YamlConfiguration();
         y.set("version",1);y.set("owner",id.toString());y.createSection("homes");
-        for(Home h:homes(id).values()) {
+        SortedMap<String,Home> saved=homes(id);
+        if(overrides.containsKey(id))y.set("max-homes-override",overrides.get(id));
+        for(Home h:saved.values()) {
             String key="homes."+h.name()+".";
             y.set(key+"world",h.world().toString());y.set(key+"world-name",h.worldName());y.set(key+"dimension",h.dimension());
             y.set(key+"x",h.x());y.set(key+"y",h.y());y.set(key+"z",h.z());y.set(key+"yaw",h.yaw());y.set(key+"pitch",h.pitch());
@@ -91,10 +112,11 @@ public final class HomeStore {
     }
     public void importNetworkModule(UUID id,String payload) throws IOException {
         if(payload.length()>2_000_000)throw new IOException("Home profile too large");
-        TreeMap<String,Home> copy=new TreeMap<>();
+        TreeMap<String,Home> copy=new TreeMap<>();Integer override;
         try {
             YamlConfiguration y=new YamlConfiguration();y.loadFromString(payload);
             if(y.getInt("version")!=1 || !id.toString().equals(y.getString("owner")))throw new IllegalArgumentException("Invalid home owner/version");
+            override=readOverride(y);
             ConfigurationSection section=y.getConfigurationSection("homes");
             if(section==null || section.getKeys(false).size()>10000)throw new IllegalArgumentException("Invalid homes");
             for(String name:section.getKeys(false)){
@@ -109,7 +131,8 @@ public final class HomeStore {
                 copy.put(name,h);
             }
         }catch(InvalidConfigurationException|RuntimeException ex){throw new IOException("Invalid home profile; local homes preserved",ex);}
-        save(id,copy);
+        save(id,copy,override);
     }
-    public void unload(UUID id) { cache.remove(id); }
+    public void unload(UUID id) { cache.remove(id);overrides.remove(id); }
 }
+

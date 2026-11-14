@@ -36,3 +36,4 @@ public final class PreferenceStoreTest {
         } finally { try(var paths=Files.walk(dir)) { for(Path p:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); } }
     }
 }
+

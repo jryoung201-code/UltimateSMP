@@ -34,6 +34,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private final Map<UUID,Integer> frozen=new HashMap<>();
     private final Map<UUID,Inventory> inspections=new HashMap<>();
     private volatile Map<Rank,Component> prefixes=Map.of();
+    private volatile Map<Rank,Integer> weights=Map.of();
     private volatile java.util.function.Predicate<UUID> showTags=id->true;
     private boolean settingsTab;
     private org.bukkit.plugin.Plugin settings;
@@ -42,7 +43,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private static final Set<String> MUTED_COMMANDS=Set.of("me","say","msg","tell","w","whisper","r","reply","pm","message","emsg","etell","ew","eme");
 
     @Override public void onEnable() {
-        saveDefaultConfig();
+        saveDefaultConfig();RankConfig.migrate(getConfig());getConfig().options().copyDefaults(true);saveConfig();
         try { store=new RankStore(getDataFolder().toPath().resolve("players.yml")); }
         catch(Exception ex) {
             getLogger().severe("Cannot load players.yml; file preserved. Fix it before enabling UltimateRanks: "+ex);
@@ -51,6 +52,9 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         Map<Rank,Component> colors=new EnumMap<>(Rank.class);
         for(Rank r:Rank.values()) colors.put(r,LEGACY.deserialize(getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r")));
         prefixes=Map.copyOf(colors);
+        Map<Rank,Integer> loadedWeights=new EnumMap<>(Rank.class);
+        for(Rank r:Rank.values())loadedWeights.put(r,getConfig().getInt("weights."+r.name(),r.defaultWeight()));
+        weights=Map.copyOf(loadedWeights);
         bindSettings();
         Bukkit.getPluginManager().registerEvents(this,this);
         for(String cmd:getDescription().getCommands().keySet()) Objects.requireNonNull(getCommand(cmd)).setTabCompleter(this);
@@ -72,9 +76,11 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
 
     private Rank rank(UUID id) { return store.get(id).rank(); }
-    public String getRankName(UUID id) { return rank(id).name(); }
+    private Rank displayRank(UUID id) { return Rank.display(store.get(id).ranks(),weights); }
+    public int getRankWeight(UUID id) { return weights.get(displayRank(id)); }
+    public String getRankName(UUID id) { return displayRank(id).name(); }
     public String getRankPrefix(UUID id) {
-        Rank r=rank(id);
+        Rank r=displayRank(id);
         return getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r");
     }
     private void bindSettings() {
@@ -147,22 +153,33 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         PermissionAttachment a=p.addAttachment(this); attachments.put(id,a);
         for(String cmd:Rules.MINIMUM.keySet()) a.setPermission("ultimateranks.command."+cmd,Rules.allowed(r,cmd));
         a.setPermission("ultimateranks.staff",r.level>=Rank.HELPER.level);
-        grantHomePermission(a,r);
-        for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),r==v);
-        for(String perm:getConfig().getStringList("extra-permissions."+r.name())) a.setPermission(perm,true);
+        a.setPermission("ultimatehomes.admin",r.level>=Rank.ADMIN.level);
+        Set<Rank> assigned=store.get(id).ranks();
+        for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),assigned.contains(v));
+        for(Rank v:Rank.values())if(v.name().startsWith("ULTIMATE_PLUS"))
+            a.setPermission("ultimateranks.rank."+v.name().replace("ULTIMATE","BLINK").toLowerCase(Locale.ROOT),assigned.contains(v));
+        for(Rank v:assigned) {
+            grantHomePermission(a,v);
+            for(String perm:getConfig().getStringList("extra-permissions."+v.name())) a.setPermission(perm,true);
+        }
         if(!oldTabs.containsKey(id)) oldTabs.put(id,p.playerListName());
-        Component tab=settingsTab?null:prefixes.get(r).append(Component.text(p.getName()));
+        Component tab=settingsTab?null:prefixes.get(displayRank(id)).append(Component.text(p.getName()));
         p.playerListName(tab); appliedTabs.put(id,p.playerListName());
         if(vanished.contains(id) && !Rules.allowed(r,"vanish")) setVanish(p,false);
         if(spectatorModes.containsKey(id) && !Rules.allowed(r,"gsp")) {
             GameMode prior=spectatorModes.remove(id); if(p.getGameMode()==GameMode.SPECTATOR) p.setGameMode(prior);
         }
         for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer);
+        List<Player> ordered=new ArrayList<>(Bukkit.getOnlinePlayers());
+        ordered.sort(Comparator.<Player>comparingInt(v->weights.get(displayRank(v.getUniqueId()))).reversed()
+            .thenComparing(v->v.getName().toLowerCase(Locale.ROOT)).thenComparing(Player::getUniqueId));
+        for(int i=0;i<ordered.size();i++)ordered.get(i).setPlayerListOrder(i+1);
         p.updateCommands();
         if(settings!=null && settingsRefresh!=null) try { settingsRefresh.invoke(settings); }
         catch(ReflectiveOperationException ex) { getLogger().warning("Rank display refresh failed: "+ex); }
     }
     static void grantHomePermission(PermissionAttachment attachment,Rank rank) {
+        if(rank==Rank.OWNER) attachment.setPermission("maxhomes.unlimited",true);
         if(rank.homes>0) attachment.setPermission("maxhomes."+rank.homes,true);
     }
     private void updateVisibility(Player viewer) {
@@ -324,7 +341,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
                     String why=reason(args,1); List<String> history=new ArrayList<>(e.warnings());
                     history.add(Instant.now()+" | "+s.getName()+" | "+why);
                     while(history.size()>100) history.remove(0);
-                    persist(id,new Entry(e.name(),e.rank(),e.mute(),e.ban(),history));
+                    persist(id,new Entry(e.name(),e.ranks(),e.mute(),e.ban(),history));
                     Player p=Bukkit.getPlayer(id); if(p!=null) say(p,"&eWarning: "+why);
                     audit(s,"warned "+e.name()+": "+why);
                 }
@@ -378,26 +395,30 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             else audit(sender,"teleported "+moved.getName());
         }));
     }
+    private String rankLabels(Entry e) {
+        return String.join(", ",e.ranks().stream().sorted(Comparator.<Rank>comparingInt(r->weights.get(r)).reversed().thenComparingInt(Enum::ordinal)).map(Rank::label).toList());
+    }
     private void ranks(CommandSender s,String[] args) {
         if(args.length==0 || args[0].equalsIgnoreCase("list")) {
-            say(s,"Staff: OWNER > DEV > ADMIN > MOD > TRIAL MOD > HELPER");
-            say(s,"Player ranks: MEMBER, Blink+ (3 homes), Blink++ (5 homes), Blink+++ (9 homes)");
-            say(s,"/rank info [player] | /rank set <player> <rank> | /rank remove <player>"); return;
+            for(Rank r:Arrays.stream(Rank.values()).sorted(Comparator.<Rank>comparingInt(v->weights.get(v)).reversed()).toList())
+                say(s,r.label()+" | weight "+weights.get(r)+(r==Rank.OWNER?" | Unlimited homes":r.homes>0?" | "+r.homes+" homes":""));
+            say(s,"/rank info [player] | /rank add <player> <rank> | /rank remove <player> [rank] | /rank set <player> <rank>");return;
         }
         String sub=args[0].toLowerCase(Locale.ROOT);
         if(sub.equals("info")) {
-            UUID id=args.length>=2?resolve(s,args[1]):self(s).getUniqueId(); Entry e=store.get(id);
-            say(s,e.name()+": "+e.rank().label()); return;
+            UUID id=args.length>=2?resolve(s,args[1]):self(s).getUniqueId();Entry e=store.get(id);
+            say(s,e.name()+": "+rankLabels(e)+" | Display: "+displayRank(id).label());return;
         }
-        require(sub.equals("set")||sub.equals("remove"),"Use /rank list, info, set or remove.");
+        require(Set.of("set","add","remove").contains(sub),"Use /rank list, info, set, add or remove.");
         require(console(s)||Rules.allowed(rank(s),"rank"),"ADMIN or higher is required to manage ranks.");
-        require(args.length>=(sub.equals("set")?3:2),"Usage: /rank set <player-or-uuid> <rank> or /rank remove <player>");
-        UUID id=resolve(s,args[1]); Entry e=store.get(id);
-        Rank assigned=sub.equals("remove")?Rank.MEMBER:Rank.parse(String.join(" ",Arrays.copyOfRange(args,2,args.length)));
+        require(args.length>=(sub.equals("remove")?2:3),"Usage: /rank "+sub+" <player-or-uuid> <rank>");
+        UUID id=resolve(s,args[1]);Entry e=store.get(id);
+        Rank assigned=args.length>=3?Rank.parse(String.join(" ",Arrays.copyOfRange(args,2,args.length))):Rank.MEMBER;
         require(console(s)||Rules.canAssign(rank(s),e.rank(),assigned),"You may only manage and assign ranks below your own. Console assigns OWNER.");
-        persist(id,e.ranked(assigned)); frozen.remove(id);
-        Player p=Bukkit.getPlayer(id); if(p!=null) { refresh(p); say(p,"Your rank is now "+assigned.label()); }
-        audit(s,"set "+e.name()+" to "+assigned.label());
+        Entry next=switch(sub){case "add"->e.added(assigned);case "remove"->args.length>=3?e.removed(assigned):e.ranked(Rank.MEMBER);default->e.ranked(assigned);};
+        persist(id,next);frozen.remove(id);
+        Player p=Bukkit.getPlayer(id);if(p!=null){refresh(p);say(p,"Your ranks: "+rankLabels(next));}
+        audit(s,"updated "+e.name()+" ranks: "+rankLabels(next));
     }
 
     @EventHandler(priority=EventPriority.HIGHEST) public void preLogin(AsyncPlayerPreLoginEvent event) {
@@ -430,7 +451,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             Bukkit.getScheduler().runTask(this,()->event.getPlayer().sendMessage(Component.text(notice("Muted",e.mute())))); return;
         }
         if(vanished.contains(id)) { event.setCancelled(true); Bukkit.getScheduler().runTask(this,()->say(event.getPlayer(),"Disable vanish to use public chat, or use /sc.")); return; }
-        Component prefix=prefixes.get(e.rank());
+        Component prefix=prefixes.get(Rank.display(e.ranks(),weights));
         event.renderer((source,displayName,message,viewer)->
                 ((viewer instanceof Player recipient && !showTags.test(recipient.getUniqueId()))?Component.empty():prefix)
                 .append(displayName).append(Component.text(": ")).append(message));
@@ -483,8 +504,8 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         if(!(s instanceof Player)&&!console(s)) return List.of();
         String action=command.getName(); int index=args.length-1; List<String> candidates=new ArrayList<>();
         if(action.equals("rank")) {
-            if(index==0) candidates.addAll(console(s)||Rules.allowed(rank(s),"rank")?List.of("set","remove","info","list"):List.of("info","list"));
-            else if(index==2 && args[0].equalsIgnoreCase("set")) for(Rank r:Rank.values()) if(console(s)||rank(s).above(r)) candidates.add(r.homes>0?r.label():r.name());
+            if(index==0) candidates.addAll(console(s)||Rules.allowed(rank(s),"rank")?List.of("set","add","remove","info","list"):List.of("info","list"));
+            else if(index==2 && Set.of("set","add","remove").contains(args[0].toLowerCase(Locale.ROOT))) for(Rank r:Rank.values()) if(console(s)||rank(s).above(r)) candidates.add(r.homes>0?r.label():r.name());
             else if(index!=1 || args[0].equalsIgnoreCase("list")) return List.of();
         } else if(action.equals("staff") && index==0) candidates.addAll(Rules.MINIMUM.keySet().stream().filter(c->console(s)||Rules.allowed(rank(s),c)).toList());
         else {
@@ -496,4 +517,5 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         return candidates.stream().filter(v->v.toLowerCase(Locale.ROOT).startsWith(partial)).sorted().toList();
     }
 }
+
 

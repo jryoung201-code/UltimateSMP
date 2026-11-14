@@ -42,9 +42,9 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         delay=Math.max(0,Math.min(30,getConfig().getInt("teleport-warmup-seconds",3)));
         try { store=new HomeStore(getDataFolder().toPath().resolve("players")); }
         catch(IOException ex) { getLogger().severe("Cannot initialize home storage: "+ex);Bukkit.getPluginManager().disablePlugin(this);return; }
-        for(String name:List.of("home","sethome","delhome","homecancel")) Objects.requireNonNull(getCommand(name)).setTabCompleter(this);
+        for(String name:List.of("home","sethome","delhome","homecancel","maxhomes")) Objects.requireNonNull(getCommand(name)).setTabCompleter(this);
         Bukkit.getPluginManager().registerEvents(this,this);timer=Bukkit.getScheduler().runTaskTimer(this,this::pulse,5,5);
-        getLogger().info("UltimateHomes ready. Home limits use the highest granted maxhomes.<number> permission.");
+        getLogger().info("UltimateHomes ready. Home limits support rank permissions, unlimited OWNER homes and /maxhomes overrides.");
     }
     public String exportNetworkModule(UUID player,String kind) throws IOException {
         if(!kind.equals("homes"))throw new IllegalArgumentException("Not a homes module");
@@ -84,7 +84,9 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         catch(ReflectiveOperationException ex){getLogger().warning("Network home transfer failed: "+ex.getClass().getSimpleName());return false;}
     }
     private void say(CommandSender sender,String text) { sender.sendMessage(Component.text("[Homes] ",NamedTextColor.GOLD).append(Component.text(text,NamedTextColor.YELLOW))); }
-    private int limit(Player p) {
+    private int limit(Player p) throws IOException {
+        if(p.hasPermission("maxhomes.unlimited"))return HomeLimits.UNLIMITED;
+        Integer override=store.override(p.getUniqueId());if(override!=null)return override;
         Map<String,Boolean> nodes=new HashMap<>();
         // Enumerate explicit/effective numeric nodes, then consult their resolved values to honor denials.
         for(var permission:p.getEffectivePermissions()) {
@@ -94,6 +96,7 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         return HomeLimits.resolve(nodes,serverCap);
     }
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args) {
+        if(command.getName().equals("maxhomes")) { manageLimit(sender,args);return true; }
         if(!(sender instanceof Player p)) { say(sender,"Use home commands in-game.");return true; }
         if(!p.hasPermission("ultimatehomes.use")) { say(p,"You do not have permission.");return true; }
         try {
@@ -119,6 +122,38 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         catch(IOException ex) { failure(p,ex); }
         return true;
     }
+    private void manageLimit(CommandSender sender,String[] args) {
+        if(!sender.hasPermission("ultimatehomes.admin")){say(sender,"You do not have permission.");return;}
+        if(!((args.length==3 && args[1].equalsIgnoreCase("set")) || (args.length==2 && args[1].equalsIgnoreCase("reset")))) {
+            say(sender,"Usage: /maxhomes <player-or-uuid> set <number> | /maxhomes <player> reset");return;
+        }
+        try {
+            Player online=Bukkit.getPlayerExact(args[0]);UUID id;
+            if(online!=null)id=online.getUniqueId();
+            else {
+                try{id=UUID.fromString(args[0]);}
+                catch(IllegalArgumentException invalid){
+                    List<OfflinePlayer> matches=Arrays.stream(Bukkit.getOfflinePlayers()).filter(p->p.getName()!=null && p.getName().equalsIgnoreCase(args[0])).toList();
+                    if(matches.size()!=1)throw new IllegalArgumentException("Unknown or ambiguous player; use their UUID.");
+                    id=matches.get(0).getUniqueId();
+                }
+                online=Bukkit.getPlayer(id);
+            }
+            if(network()!=null && online==null)throw new IllegalArgumentException("On BlinkNetwork, run this on the server where that player is currently online.");
+            Integer value=null;
+            if(args[1].equalsIgnoreCase("set")) {
+                if(!args[2].matches("[0-9]+"))throw new IllegalArgumentException("Use a whole number from 0 to 2147483646.");
+                try{value=Integer.valueOf(args[2]);}catch(NumberFormatException ex){throw new IllegalArgumentException("Home limit is too large.");}
+                if(value==HomeLimits.UNLIMITED)throw new IllegalArgumentException("Maximum numeric override is 2147483646.");
+            }
+            store.setOverride(id,value);profileChanged(id);
+            String message=value==null?"Home limit reset to rank/permission grants.":"Home limit set to "+value+". OWNER/unlimited permission takes priority.";
+            say(sender,args[0]+": "+message);
+            if(online!=null){say(online,message);if(online.getOpenInventory().getTopInventory().getHolder() instanceof Menu)list(online,0);}
+            getLogger().info(sender.getName()+" changed home limit for "+id+" to "+(value==null?"permissions":value));
+        }catch(IllegalArgumentException ex){say(sender,ex.getMessage());}
+        catch(IOException ex){say(sender,"Could not save home limit; previous data preserved. Check console.");getLogger().severe("Home limit update failed: "+ex);}
+    }
     private void failure(Player p,IOException error) { say(p,"Could not read/save your homes. Existing data was preserved; ask staff to check console.");getLogger().severe("Home data error for "+p.getUniqueId()+": "+error); }
     private void save(Player p,String rawName) throws IOException {
         if(p.isDead() || p.isSleeping() || p.isInsideVehicle()) throw new IllegalArgumentException("Be alive, awake and outside a vehicle to set a home.");
@@ -126,7 +161,7 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         String homeDimension=switch(p.getWorld().getEnvironment()){case NETHER->"Nether";case THE_END->"End";default->"Overworld";};
         Home h=new Home(name,p.getWorld().getUID(),p.getWorld().getName(),homeDimension,l.getX(),l.getY(),l.getZ(),l.getYaw(),l.getPitch());
         store.put(p.getUniqueId(),h,limit(p));profileChanged(p.getUniqueId());cancelIfHome(p,name);
-        say(p,"Saved home '"+name+"' ("+store.homes(p.getUniqueId()).size()+"/"+limit(p)+").");
+        say(p,"Saved home '"+name+"' ("+store.homes(p.getUniqueId()).size()+"/"+HomeLimits.label(limit(p))+").");
     }
     private ItemStack icon(Material material,String title,String... lore) {
         ItemStack item=new ItemStack(material);ItemMeta meta=item.getItemMeta();meta.displayName(Component.text(title,NamedTextColor.YELLOW));
@@ -137,13 +172,13 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
     }
     private void list(Player p,int requestedPage) throws IOException {
         List<Home> homes=new ArrayList<>(store.homes(p.getUniqueId()).values());int page=Math.max(0,Math.min(requestedPage,Math.max(0,(homes.size()-1)/45)));
-        Menu m=new Menu(p.getUniqueId(),View.LIST,page,homes,null);open(p,m,"Your homes ("+homes.size()+"/"+limit(p)+")",54);
+        Menu m=new Menu(p.getUniqueId(),View.LIST,page,homes,null);open(p,m,"Your homes ("+homes.size()+"/"+HomeLimits.label(limit(p))+")",54);
         for(int i=page*45;i<Math.min(homes.size(),(page+1)*45);i++) {
             Home h=homes.get(i);m.inventory.setItem(i-page*45,icon(Material.RED_BED,h.name(),h.worldName()+" | "+(int)h.x()+", "+(int)h.y()+", "+(int)h.z(),"Click to teleport or manage."));
         }
         if(page>0) m.inventory.setItem(45,icon(Material.ARROW,"Previous page"));
         m.inventory.setItem(47,icon(Material.LIME_CONCRETE,"Create home here","Creates home1, home2, etc. at your position.","Use /sethome <name> for a custom name."));
-        m.inventory.setItem(49,icon(Material.PAPER,"Page "+(page+1)+" | Limit: "+limit(p),"Highest granted maxhomes.<number> permission.","/sethome <name> | /home <name> | /delhome <name>"));
+        m.inventory.setItem(49,icon(Material.PAPER,"Page "+(page+1)+" | Limit: "+HomeLimits.label(limit(p)),"Your rank permissions or staff-assigned home limit.","/sethome <name> | /home <name> | /delhome <name>"));
         m.inventory.setItem(51,icon(Material.BARRIER,"Close"));
         if((page+1)*45<homes.size()) m.inventory.setItem(53,icon(Material.ARROW,"Next page"));
     }
@@ -281,8 +316,16 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         for(Player p:Bukkit.getOnlinePlayers()) if(p.getOpenInventory().getTopInventory().getHolder() instanceof Menu) { p.getOpenInventory().getTopInventory().clear();p.closeInventory(); }
     }
     @Override public List<String> onTabComplete(CommandSender sender,Command command,String alias,String[] args) {
+        if(command.getName().equals("maxhomes")) {
+            if(!sender.hasPermission("ultimatehomes.admin"))return List.of();
+            List<String> choices=switch(args.length){
+                case 1->Bukkit.getOnlinePlayers().stream().filter(p->!(sender instanceof Player viewer)||viewer.canSee(p)).map(Player::getName).toList();
+                case 2->List.of("set","reset");case 3->args[1].equalsIgnoreCase("set")?List.of("0","1","3","5","9","20"):List.of();default->List.of();};
+            return choices.stream().filter(v->v.toLowerCase(Locale.ROOT).startsWith(args[args.length-1].toLowerCase(Locale.ROOT))).toList();
+        }
         if(!(sender instanceof Player p) || !p.hasPermission("ultimatehomes.use") || args.length!=1 || command.getName().equals("homecancel")) return List.of();
         try { return store.homes(p.getUniqueId()).keySet().stream().filter(s->s.startsWith(args[0].toLowerCase(Locale.ROOT))).toList(); }
         catch(IOException ex) { return List.of(); }
     }
 }
+

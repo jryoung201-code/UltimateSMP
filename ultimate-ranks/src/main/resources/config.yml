@@ -1,3 +1,17 @@
+# Highest weight supplies the visible chat/TAB tag and sorts first in TAB.
+# Weights do not grant staff authority. Permissions from all assigned ranks combine.
+weights:
+  OWNER: 600
+  DEV: 500
+  ADMIN: 400
+  MOD: 300
+  TRIAL_MOD: 200
+  HELPER: 100
+  ULTIMATE_PLUS_PLUS_PLUS: 30
+  ULTIMATE_PLUS_PLUS: 20
+  ULTIMATE_PLUS: 10
+  MEMBER: 0
+
 prefixes:
   OWNER: '&4&l[OWNER] &r'
   DEV: '&b&l[DEV] &r'
@@ -5,11 +19,12 @@ prefixes:
   MOD: '&2&l[MOD] &r'
   TRIAL_MOD: '&e[TRIAL MOD] &r'
   HELPER: '&a[HELPER] &r'
-  BLINK_PLUS: '&b[Blink+] &r'
-  BLINK_PLUS_PLUS: '&d[Blink++] &r'
-  BLINK_PLUS_PLUS_PLUS: '&6[Blink+++] &r'
+  ULTIMATE_PLUS: '&b[Ultimate+] &r'
+  ULTIMATE_PLUS_PLUS: '&d[Ultimate++] &r'
+  ULTIMATE_PLUS_PLUS_PLUS: '&6[Ultimate+++] &r'
   MEMBER: '&7[MEMBER] &r'
-# These are exact-rank permissions, not inherited. Never grants OP or wildcard '*'.
+# Grants from every assigned rank combine; staff hierarchy remains fixed.
+# Never grants OP or wildcard '*'.
 # Restart after editing this config.
 extra-permissions:
   OWNER: [ultimateoptimize.admin]
@@ -18,10 +33,11 @@ extra-permissions:
   MOD: []
   TRIAL_MOD: []
   HELPER: []
-  BLINK_PLUS: []
-  BLINK_PLUS_PLUS: []
-  BLINK_PLUS_PLUS_PLUS: []
+  ULTIMATE_PLUS: []
+  ULTIMATE_PLUS_PLUS: []
+  ULTIMATE_PLUS_PLUS_PLUS: []
   MEMBER: []
 
-# Blink home limits (3/5/9) are built in and also apply with older configs.
+# Ultimate home limits (3/5/9) are built in and also apply with older configs.
 # Extra permissions are additive; another higher maxhomes.# permission still wins.
+
