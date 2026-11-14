@@ -100,4 +100,48 @@ class DatabaseTest {
         assertThrows(IllegalArgumentException.class,()->db.save(p,s,new byte[2097153],false));
         assertThrows(IllegalArgumentException.class,()->db.save(p,s,null,false));
     }
+
+    private static byte[] position(double x,double z){return ("version: 1\ndimension: Overworld\nx: "+x+"\ny: 70.0\nz: "+z+"\ninventory: PRESERVE_ITEM_NBT\nender: PRESERVE_ENDER_NBT\nhealth: 18.0\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);}
+    @Test void failedEdgeCrossingReconnectsToConfirmedSourcePosition()throws Exception{
+        Region source=new Region("Overworld",20000+new Random().nextInt(10000),22000);
+        db.assign(source,A);db.assign(new Region("Overworld",source.x()+1,source.z()),B);
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] from=position((source.x()+1)*144.0-0.01,source.z()*144.0+60);
+        byte[] to=position((source.x()+1)*144.0+0.01,source.z()*144.0+60);
+        assertTrue(db.save(p,session,from,false));assertTrue(db.prepare(p,session,B,ticket,from,to));
+        assertTrue(db.cancel(p,session,ticket,true));assertEquals(A,db.loginTarget(p,db.route(p)));
+        assertArrayEquals(from,db.claim(p,A,UUID.randomUUID(),false));
+    }
+    @Test void offlineRescuePreservesItemsAndProfilesAndRejectsLateSourceSave()throws Exception{
+        Region r=new Region("Overworld",40000+new Random().nextInt(10000),33000);db.assign(r,B);
+        UUID p=UUID.randomUUID(),old=UUID.randomUUID();db.claim(p,A,old,true);
+        byte[] before=position(-0.001,-0.001);db.save(p,old,before,true);
+        db.writeModule(p,"ranks",0,"BLINK_PLUS_PLUS_PLUS".getBytes());
+        double x=r.x()*144.0+20,z=r.z()*144.0+20;
+        db.rescueOffline(p,B,x,72,z);
+        assertEquals(B,db.loginTarget(p,db.route(p)));
+        assertFalse(db.save(p,old,before,true));
+        byte[] after=db.claim(p,B,UUID.randomUUID(),false);
+        assertArrayEquals(SnapshotPosition.relocate(before,"Overworld",x,72,z),after);
+        assertEquals(1,db.modules(p).get("ranks").revision());
+        assertEquals("BLINK_PLUS_PLUS_PLUS",new String(db.modules(p).get("ranks").payload()));
+    }
+    @Test void rescueCannotBypassActiveOrPendingOwnership()throws Exception{
+        Region r=new Region("Overworld",55000+new Random().nextInt(10000),44000);db.assign(r,A);
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] bytes=position(r.x()*144.0+20,r.z()*144.0+20);db.save(p,session,bytes,false);
+        assertThrows(SQLException.class,()->db.rescueOffline(p,A,r.x()*144.0+20,72,r.z()*144.0+20));
+        assertTrue(db.prepare(p,session,B,ticket,bytes,bytes));
+        assertThrows(SQLException.class,()->db.rescueOffline(p,A,r.x()*144.0+20,72,r.z()*144.0+20));
+        assertEquals(ticket,db.route(p).ticket());assertEquals("handoff",db.route(p).state());
+    }
+    @Test void rejectedRescueDoesNotChangeSavedPosition()throws Exception{
+        Region r=new Region("Overworld",70000+new Random().nextInt(10000),55000);db.assign(r,A);
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] bytes=position(r.x()*144.0+20,r.z()*144.0+20);db.save(p,session,bytes,true);
+        assertThrows(SQLException.class,()->db.rescueOffline(p,B,r.x()*144.0+20,72,r.z()*144.0+20));
+        assertThrows(SQLException.class,()->db.rescueOffline(p,A,(r.x()+1)*144.0+20,72,r.z()*144.0+20));
+        assertArrayEquals(bytes,db.claim(p,A,UUID.randomUUID(),false));
+    }
 }
+

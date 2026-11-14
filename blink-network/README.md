@@ -1,8 +1,27 @@
-# BlinkNetwork 0.2.4 — particle borders and safer transfers
+# BlinkNetwork 0.2.5 — particle borders and safer transfers
 
 Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neon PostgreSQL database, and persistent fenced sessions. This is a first network-layer release: live Java/Bedrock and fault testing is required before migrating the public server.
 
-## New in 0.2.4
+## New in 0.2.5: border-loop fix
+
+- Region-edge handoffs are queued for the next tick, after cancelled movement has returned to `getFrom()`. Rollback uses that confirmed source coordinate, not the uncommitted crossing coordinate.
+- Arrivals and restored logins are inset two blocks from foreign/unassigned edges and world borders, with nearby vertical collision checks inside the same owned territory. Same-owner internal edges are unchanged.
+- A three-second automatic cooldown follows arrival and rollback. Camera turns cannot start handoffs. Velocity throttles rapid UUID/ticket requests across reconnects and stops fallback redirects from turning rejected backend logins into loops.
+- Checkpoint and disconnect snapshots use an owned current position or the last committed owned position. Inventory and enabled profile modules remain intact.
+- New console-only `blinknet rescue <UUID> <x> <y> <z>` repairs an OFFLINE player's saved coordinates on this backend. It checks terrain and territory, changes only location/last-server, and writes an audit entry. It never unlocks active/pending sessions or resets inventory/ranks.
+- Includes 0.2.4 BlinkDimensions portal delegation compatibility. Existing schema v2, server IDs, assignments and profile choices are unchanged. No additional schema migration is needed for this patch.
+
+### Recover an already stuck player
+
+1. Back up Neon/player data. Stop V and both Paper servers. Replace the Paper JAR on both backends and the Velocity JAR with 0.2.5; keep config/player files. Start the Paper backends, leaving V stopped during repair.
+2. Choose known generated, clear coordinates well inside an assigned region. Use the player's actual forwarded UUID (Floodgate UUID for Bedrock), not a guessed offline UUID.
+3. On the chosen backend's CONSOLE run `blinknet rescue PLAYER_UUID X Y Z`. The player need not join. Inventory/Ender Chest and profile modules are preserved; unknown, active and pending players are refused.
+4. If a stale active/handoff lock is reported, stop every process that might still hold the player's old session. From a separate management backend use `blinknet recover PLAYER_UUID ALL_PLAYER_SERVER_PROCESSES_STOPPED`, then `rescue`. Pending recovery uses the last committed SOURCE snapshot and may roll back post-checkpoint actions; review against backups. Never force recovery while an old player session could still be alive.
+5. Start V and test reconnect plus both crossing directions. Do not delete player rows, reset inventories, or reassign regions as a workaround.
+
+If a border still fails, collect the proxy/source/destination error logs. These guards stop repeat failures rather than silently trying unrelated world copies. Automated regression tests do not replace live Java/Bedrock testing.
+
+## Previous in 0.2.4
 - Adds per-player particle walls near region edges. Cyan means the neighboring region belongs to another backend; red means unassigned. Shared boundaries within the same server are invisible. Configure visibility, distance, spacing, height, update interval, and hex colors under `particle-border` on each Paper backend.
 - Treats a claimed destination as an accepted handoff during source timeout, preventing false "Transfer state changed" source kicks and any source overwrite after the target owns the snapshot. An incomplete/uncertain handoff remains fenced for safety.
 - Returning players connect through Velocity to the backend owning their **saved region**. If a player's last position is in an unassigned region, assign that region or recover the player to a verified safe coordinate; do not bypass ownership by forcing an unrelated backend.
@@ -19,7 +38,7 @@ Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neo
 
 ## What is implemented
 
-- Two JARs: `BlinkNetwork-Paper-0.2.4.jar` for every backend and `BlinkNetwork-Velocity-0.2.4.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
+- Two JARs: `BlinkNetwork-Paper-0.2.5.jar` for every backend and `BlinkNetwork-Velocity-0.2.5.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
 - Server IDs `BlinkSMP-(Overworld|Nether|End)-(01..99)`; additional registered servers need no code changes.
 - 9x9-chunk ownership regions (144x144 blocks), floor division for negative coordinates; initial ownership assignment, refresh within five seconds.
 - Automatic crossings to available destinations, vanilla teleport/portal destination interception, and reconnect routing using the player's saved coordinates and live region ownership. New players first enter the bootstrap server.
@@ -114,3 +133,4 @@ CI uses Java 21 and an isolated PostgreSQL 16 service. Policy tests cover floor 
 - Home dimension information is new. Old home files infer the dimension from `_nether` / `_the_end` world names; if a legacy world used a custom name, review and correct its home data before migration. Remote homes use their coordinate's current assigned region; no chunk data is moved.
 - Statistics use Bukkit/Paper's native counters; large profiles can increase tick cost. Advancement progress uses native criteria APIs which may trigger advancement rewards again. It is **off by default** for this reason. Recipes, economy, and unrelated plugin data are not yet synchronized.
 - This is a staging release. Passing CI is not proof of correct behavior under network partitions, server crashes, overlapping edits, or Bedrock identities. Do not deploy directly to a public network.
+

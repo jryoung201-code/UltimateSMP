@@ -1,5 +1,5 @@
 name: BlinkNetwork
-version: 0.2.4
+version: 0.2.5
 main: shop.blinksmp.network.paper.BlinkNetwork
 api-version: '1.21.11'
 author: RealJR_25736
@@ -11,3 +11,4 @@ commands:
 permissions:
   blinknetwork.admin:
     default: op
+
