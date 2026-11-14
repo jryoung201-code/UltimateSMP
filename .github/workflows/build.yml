@@ -24,3 +24,4 @@ jobs:
           name: UltimateOptimize-1.0.0
           path: target/UltimateOptimize-1.0.0.jar
           if-no-files-found: error
+

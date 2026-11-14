@@ -28,6 +28,22 @@ public final class HomeStoreTest {
             store.unload(player);check(store.get(player,"base").equals(updated),"Unload/rejoin reloads data");
             try { store.homes(player).clear();throw new AssertionError("Mutable public view"); } catch(UnsupportedOperationException expected) { checks++; }
             try { new Home("bad",world,"world",Double.NaN,64,0,0,0);throw new AssertionError("NaN coordinate accepted"); } catch(IllegalArgumentException expected) { checks++; }
+            store.setOverride(player,9);
+            check(new HomeStore(dir).override(player)==9,"Staff override survives restart");
+            store.put(player,second,HomeLimits.UNLIMITED);
+            check(store.override(player)==9,"Saving home preserves override");
+            HomeStore replica=new HomeStore(dir.resolve("replica"));
+            replica.importNetworkModule(player,store.exportNetworkModule(player));
+            check(replica.override(player)==9 && replica.homes(player).equals(store.homes(player)),"Network round trip includes override and homes");
+            String invalidProfile=store.exportNetworkModule(player).replace("max-homes-override: 9","max-homes-override: -1");
+            try{replica.importNetworkModule(player,invalidProfile);throw new AssertionError("Invalid override accepted");}catch(IOException expected){checks++;}
+            check(replica.override(player)==9,"Rejected network override preserves previous state");
+            store.setOverride(player,0);check(new HomeStore(dir).override(player)==0,"Zero override persists");
+            store.setOverride(player,null);replica.importNetworkModule(player,store.exportNetworkModule(player));
+            check(replica.override(player)==null && new HomeStore(dir).override(player)==null,"Reset propagates and persists");
+            check(!store.homes(player).isEmpty(),"Override reset never deletes homes");
+            // Legacy files without override continue to load.
+            check(store.override(other)==null,"Legacy files default to permission limits");
             // Corrupt data must never be silently overwritten by a new home.
             Path file=dir.resolve(player+".yml");Files.writeString(file,"version: 1\nowner: 'wrong-owner'\nhomes: {}\n");store.unload(player);
             byte[] invalid=Files.readAllBytes(file);
@@ -36,9 +52,12 @@ public final class HomeStoreTest {
             // Force a write failure: the per-UUID target is an occupied directory.
             UUID blocked=UUID.randomUUID();store.homes(blocked);Path occupied=dir.resolve(blocked+".yml");Files.createDirectory(occupied);Files.writeString(occupied.resolve("keep.txt"),"keep");
             try { store.put(blocked,home,10);throw new AssertionError("Write failure not reported"); } catch(IOException expected) { checks++; }
+            try{store.setOverride(blocked,5);throw new AssertionError("Override write failure not reported");}catch(IOException expected){checks++;}
+            check(store.override(blocked)==null,"Failed override save does not update memory");
             check(store.homes(blocked).isEmpty() && Files.readString(occupied.resolve("keep.txt")).equals("keep"),"Failed save publishes no in-memory home or destructive replacement");
             try(var files=Files.list(dir)) { check(files.noneMatch(p->p.toString().endsWith(".tmp")),"Temporary files cleaned after success/failure"); }
             System.out.println("PASS: "+checks+" atomic persistence, restart, limit, corruption and write-failure checks");
         } finally { try(var walk=Files.walk(dir)) { for(Path path:walk.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(path); } }
     }
 }
+

@@ -1,10 +1,14 @@
 name: UltimateHomes
-version: 1.0.0
+version: 1.1.0
 main: shop.blinksmp.homes.UltimateHomes
 api-version: '1.21.11'
 author: Aven
 description: Persistent UUID homes, numeric maxhomes permissions, and a Bedrock-friendly chest GUI.
 commands:
+  maxhomes:
+    description: Set a player home limit or reset to permissions
+    usage: /<command> <player> set <number>
+    permission: ultimatehomes.admin
   home:
     aliases: [homes]
     description: Open your homes GUI or teleport to a named home
@@ -24,9 +28,14 @@ commands:
     usage: /homecancel
     permission: ultimatehomes.use
 permissions:
+  ultimatehomes.admin:
+    default: op
+  maxhomes.unlimited:
+    default: false
   ultimatehomes.use:
     description: Manage and teleport to your own homes
     default: true
   maxhomes.1:
     description: Allow one home (higher explicitly granted numeric limits take precedence)
     default: true
+

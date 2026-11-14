@@ -1,3 +1,13 @@
+# UltimateHomes 1.1.0 additions
+
+OWNER from UltimateRanks 1.2.0 receives `maxhomes.unlimited`, displayed as **Unlimited** in the homes GUI. It bypasses the numeric permission cap and staff overrides. Blink rank quotas remain 3 / 5 / 9; all assigned numeric permission grants are considered and the highest wins.
+
+`/maxhomes <player-or-uuid> set <number>` sets a persistent per-player limit (0 disables creating additional homes). `/maxhomes <player-or-uuid> reset` removes it and restores permission-based limits. Requires `ultimatehomes.admin` (OP/console by default; also granted to UltimateRanks ADMIN, DEV and OWNER). Nonnegative numeric overrides up to 2147483646 bypass `server-max-homes`; `maxhomes.unlimited` still takes priority. Lowering a limit never deletes existing homes or prevents updating/deleting them.
+
+Overrides are saved atomically with the player's homes and included in BlinkNetwork's homes profile module. In a network, run `/maxhomes` on the Paper server where that player is currently online; offline editing is rejected to avoid replacing newer shared homes with stale local data. Without BlinkNetwork, cached offline names or UUIDs work. Upgrade UltimateHomes on every backend together. Sync requires BlinkNetwork profile sync to be enabled; no new database schema is needed.
+
+Install on Paper 1.21.11 / Java 21 alongside UltimateRanks 1.2.0, replacing old JARs and restarting. Retain both plugin data folders. Unlimited removes the gameplay quota; existing file-size and corruption safeguards still apply.
+
 # UltimateHomes 1.0.0
 
 Paper 1.21.11 / Java 21. Standalone UUID-based homes with a chest GUI compatible
@@ -83,3 +93,4 @@ coordinates, restart/deletion, ownership isolation, downgraded limits, failed
 writes and preservation of corrupt files. Live Paper/Geyser GUI, permissions
 provider integration and teleport interaction testing remain necessary; no live
 Minecraft server/client was available here.
+

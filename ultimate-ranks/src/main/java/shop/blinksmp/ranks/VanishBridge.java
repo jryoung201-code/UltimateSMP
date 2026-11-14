@@ -26,3 +26,4 @@ public final class VanishBridge {
         return set(gui,player,!(hidden||localHidden));
     }
 }
+

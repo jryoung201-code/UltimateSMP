@@ -1,3 +1,21 @@
+# UltimateRanks 1.2.0
+
+A player can hold multiple ranks. Existing `rank` entries migrate automatically to a `ranks` list on the next save. Names, UUIDs and sanctions are preserved.
+
+- `/rank add <player-or-uuid> <rank>` adds a membership.
+- `/rank remove <player-or-uuid> <rank>` removes only that membership. Removing the last rank restores MEMBER.
+- `/rank set <player-or-uuid> <rank>` replaces all memberships (legacy behavior).
+- `/rank remove <player-or-uuid>` resets all memberships to MEMBER (legacy behavior).
+- `/rank info [player]` lists every rank and the visible rank; `/rank list` shows weights.
+
+`weights` in `plugins/UltimateRanks/config.yml` determines the single tag used in chat and TAB. Higher weights appear first in TAB. Equal display weights use stable enum order; equal player weights sort by name then UUID. Defaults are OWNER 600, DEV 500, ADMIN 400, MOD 300, TRIAL_MOD 200, HELPER 100, Blink+++ 30, Blink++ 20, Blink+ 10, MEMBER 0. Existing configs gain these defaults while retaining custom settings. Restart after changes.
+
+Permissions from every assigned rank combine. Blink+ grants `maxhomes.3`, Blink++ grants `maxhomes.5`, Blink+++ grants `maxhomes.9`. OWNER grants `maxhomes.unlimited`, independently of which tag is visible. ADMIN and higher get `ultimatehomes.admin` for `/maxhomes`.
+
+Display weights never change the fixed staff authority hierarchy. Rank management still requires ADMIN or higher and can only affect players and ranks below the actor; only console can assign OWNER. No automatic staff assignment or OP.
+
+With BlinkNetwork profile sync enabled, all memberships are exported in the existing ranks module; sanctions remain separate. Upgrade UltimateRanks on every Paper backend together to avoid an old single-rank build flattening memberships. UltimateHomes 1.1.0 is required for unlimited homes. Install these on Paper, not Velocity.
+
 # UltimateRanks 1.0.3
 
 Standalone Paper 1.21.11 / Java 21 plugin for UltimateSMP. No LuckPerms or client
@@ -163,4 +181,5 @@ nametags and the tab list when no custom scoreboard is active. It leaves custom
 scoreboards and existing main-scoreboard teams/objectives alone. Those other
 plugins control their own tab/nametag appearance. Without UltimateSettings, the
 original global chat/tab prefixes continue to work. Rank data is unchanged.
+
 

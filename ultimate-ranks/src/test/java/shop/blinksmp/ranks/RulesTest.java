@@ -54,3 +54,4 @@ public final class RulesTest {
         System.out.println("PASS: "+checks+" rank authorization and duration checks");
     }
 }
+

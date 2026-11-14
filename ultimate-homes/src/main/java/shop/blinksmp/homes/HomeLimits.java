@@ -5,11 +5,14 @@ import java.util.Map;
 
 public final class HomeLimits {
     private HomeLimits() {}
+    public static final int UNLIMITED=Integer.MAX_VALUE;
+    public static String label(int limit) { return limit==UNLIMITED?"Unlimited":Integer.toString(limit); }
     public static int resolve(Map<String,Boolean> permissions,int serverCap) {
         int result=0;
         for(var entry:permissions.entrySet()) {
             String node=entry.getKey().toLowerCase(Locale.ROOT);
             if(!Boolean.TRUE.equals(entry.getValue()) || !node.startsWith("maxhomes.")) continue;
+            if(node.equals("maxhomes.unlimited"))return UNLIMITED;
             String suffix=node.substring(9);
             if(!suffix.matches("[0-9]+")) continue;
             try { result=Math.max(result,Math.min(serverCap,Integer.parseInt(suffix))); }
@@ -22,3 +25,4 @@ public final class HomeLimits {
         return input.toLowerCase(Locale.ROOT);
     }
 }
+

@@ -1,7 +1,11 @@
 # Grant maxhomes.3, maxhomes.5, maxhomes.10, etc. The highest true numeric node wins.
 # Default is maxhomes.1. Numeric limits apply to creating homes, not deleting existing ones.
+# maxhomes.unlimited (automatically granted by UltimateRanks OWNER) bypasses numeric caps.
+# /maxhomes <player> set <number> overrides numeric permissions; reset restores them.
+# Explicit staff overrides also bypass this numeric permission cap.
 # This cap bounds very large permission values; increase if needed (1-10000).
 server-max-homes: 1000
 teleport-warmup-seconds: 3
 # Actual movement or damage cancels warmup and pending chunk loading.
 # A home must have safe solid ground and room for the player before teleporting.
+

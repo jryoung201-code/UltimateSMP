@@ -20,11 +20,15 @@ public final class HomePermissionTest {
             UltimateRanks.grantHomePermission(attachment,ranks[i]);
             if(!attachment.getPermissions().equals(Map.of(expected[i],true)))throw new AssertionError("Wrong effective grant for "+ranks[i]);
         }
-        for(Rank rank:Rank.values())if(rank.homes==0) {
+        for(Rank rank:Rank.values())if(rank.homes==0 && rank!=Rank.OWNER) {
             PermissionAttachment attachment=new PermissionAttachment(plugin,holder);
             UltimateRanks.grantHomePermission(attachment,rank);
             if(!attachment.getPermissions().isEmpty())throw new AssertionError("Existing rank home permissions changed: "+rank);
         }
+        PermissionAttachment owner=new PermissionAttachment(plugin,holder);
+        UltimateRanks.grantHomePermission(owner,Rank.OWNER);
+        if(!owner.getPermissions().equals(Map.of("maxhomes.unlimited",true)))throw new AssertionError("OWNER must have unlimited homes");
         System.out.println("PASS: exact Bukkit home permission grants for Blink ranks; legacy ranks unaffected");
     }
 }
+

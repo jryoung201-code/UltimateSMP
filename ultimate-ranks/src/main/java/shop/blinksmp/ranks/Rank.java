@@ -1,6 +1,6 @@
 package shop.blinksmp.ranks;
 
-import java.util.Locale;
+import java.util.*;
 
 public enum Rank {
     MEMBER(0, "&7"), BLINK_PLUS(0, "&b", 3), BLINK_PLUS_PLUS(0, "&d", 5), BLINK_PLUS_PLUS_PLUS(0, "&6", 9),
@@ -19,6 +19,15 @@ public enum Rank {
             default -> name().replace('_',' ');
         };
     }
+    public int defaultWeight() { return switch(this) {
+        case MEMBER -> 0; case BLINK_PLUS -> 10; case BLINK_PLUS_PLUS -> 20; case BLINK_PLUS_PLUS_PLUS -> 30;
+        default -> level*100;
+    }; }
+    /** Display weights never change staff authority. Ties use the stable enum order. */
+    public static Rank display(Collection<Rank> ranks,Map<Rank,Integer> weights) {
+        return ranks.stream().max(Comparator.<Rank>comparingInt(r->weights.getOrDefault(r,r.defaultWeight()))
+            .thenComparingInt(Enum::ordinal)).orElse(MEMBER);
+    }
     public boolean above(Rank other) { return level > other.level; }
     public static Rank parse(String value) {
         String key=value.trim().toUpperCase(Locale.ROOT).replace(' ','_').replace('-','_');
@@ -32,3 +41,4 @@ public enum Rank {
         return valueOf(key);
     }
 }
+

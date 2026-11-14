@@ -33,3 +33,4 @@ public final class VanishBridgeTest {
         System.out.println("PASS: "+checks+" vanish bridge UUID, shared-state, migration and failure checks");
     }
 }
+
