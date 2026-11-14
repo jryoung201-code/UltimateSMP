@@ -31,3 +31,4 @@ class QueuePolicyTest {
         assertFalse(FailurePolicy.leave("leave"));assertFalse(FailurePolicy.leave("/leave someone"));assertFalse(FailurePolicy.leave("/server"));assertFalse(FailurePolicy.leave(null));
     }
 }
+

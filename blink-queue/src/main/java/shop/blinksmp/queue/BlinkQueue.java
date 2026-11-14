@@ -49,7 +49,7 @@ public final class BlinkQueue {
             var world=factory.createVirtualWorld(Dimension.OVERWORLD,0.5,65,0.5,0,0);
             var block=factory.createSimpleBlock("minecraft:glass");for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)world.setBlock(x,64,z,block);
             world.fillSkyLight(15);
-            limbo=factory.createLimbo(world).setName("BlinkSMP Virtual Queue").setGameMode(GameMode.ADVENTURE)
+            limbo=factory.createLimbo(world).setName("UltimateSMP Virtual Queue").setGameMode(GameMode.ADVENTURE)
                 .setWorldTime(6000).setViewDistance(2).setSimulationDistance(2).setReadTimeout(30_000).setShouldRejoin(true).setShouldRespawn(true);
             capacity=new Semaphore(config.capacity());ready=true;
             timer=proxy.getScheduler().buildTask(this,this::tick).repeat(Duration.ofSeconds(config.pollSeconds())).schedule();
@@ -112,7 +112,7 @@ public final class BlinkQueue {
     }
     private void show(Attempt a){
         a.player.sendActionBar(Component.text("Waiting for a safe world... /leave for another server — "+a.budget.secondsLeft(System.nanoTime())+"s"));
-        a.player.showTitle(Title.title(Component.text("BlinkSMP Queue"),Component.text("Waiting for an available world..."),Title.Times.times(Duration.ZERO,Duration.ofSeconds(config.pollSeconds()+1),Duration.ZERO)));
+        a.player.showTitle(Title.title(Component.text("UltimateSMP Queue"),Component.text("Waiting for an available world..."),Title.Times.times(Duration.ZERO,Duration.ofSeconds(config.pollSeconds()+1),Duration.ZERO)));
     }
     private void resolve(Attempt a){
         if(!ready||a.departing||a.leaving.get()||a.virtual==null||attempts.get(a.player.getUniqueId())!=a||!a.routing.compareAndSet(false,true))return;
@@ -143,3 +143,4 @@ public final class BlinkQueue {
     private void fail(Attempt a,String message){if(remove(a))a.player.disconnect(Component.text(message));}
     @Subscribe public void stop(ProxyShutdownEvent event){ready=false;if(timer!=null)timer.cancel();for(Attempt a:attempts.values())fail(a,"The proxy is restarting. Please reconnect shortly.");if(limbo!=null)limbo.dispose();}
 }
+

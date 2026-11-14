@@ -9,3 +9,4 @@ record QueueConfig(boolean enabled,int waitSeconds,int pollSeconds,int capacity)
     }
     private static int number(Properties p,String key,int fallback,int min,int max){int n=Integer.parseInt(p.getProperty(key,""+fallback).trim());if(n<min||n>max)throw new IllegalArgumentException("Invalid "+key);return n;}
 }
+

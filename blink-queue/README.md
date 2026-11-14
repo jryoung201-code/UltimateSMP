@@ -1,3 +1,7 @@
+# Queue branding update 1.1.1
+
+The queue title is now **UltimateSMP Queue**, and the Limbo world is **UltimateSMP Virtual Queue**. Replace the old BlinkQueue JAR on Velocity and restart the proxy. Keep LimboAPI and the existing queue configuration. Plugin IDs and BlinkNetwork integration stay compatible; no database changes are needed.
+
 # BlinkQueue 1.1.0 — entirely virtual queue
 
 The waiting room IS the queue now. It lives inside Velocity using LimboAPI. No separate Paper queue server, queue IP/port, host-start endpoint or paid host API is needed. It only works while the Velocity proxy itself is running.
@@ -49,3 +53,4 @@ A world admission has a short exact-target reservation, revalidated against Neon
 CI builds the Java 25 queue plugin and the Java 21 network artifacts, runs queue/bridge/command/admission tests and PostgreSQL integration tests, including stale-session recovery followed by direct rejoin of a healthy original backend without a physical queue.
 
 LimboAPI is compiled against its official checksum-pinned release JAR because its 1.2.0 Maven artifact is not published. It remains a separate runtime dependency and is not bundled. Test Java 1.21.11 and Geyser/Floodgate clients with your exact proxy build before opening the network. LimboAPI's required profile hooks and any authentication-plugin kick callbacks still need to be configured correctly. The build does not install plugins on live hosts or delete a hosting server.
+

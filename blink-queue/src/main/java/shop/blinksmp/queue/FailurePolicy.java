@@ -10,3 +10,4 @@ final class FailurePolicy {
         return reason.isEmpty()||(reason.get() instanceof TranslatableComponent t&&t.key().equals("velocity.error.internal-server-connection-error"));
     }
 }
+

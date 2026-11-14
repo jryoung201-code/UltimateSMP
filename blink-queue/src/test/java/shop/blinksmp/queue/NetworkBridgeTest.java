@@ -27,3 +27,4 @@ class NetworkBridgeTest {
         NetworkBridge b=new NetworkBridge(new Broken());assertThrows(CompletionException.class,()->b.destination(UUID.randomUUID()).join());assertFalse(b.leave(UUID.randomUUID()).get());assertFalse(b.recover(null,"BlinkSMP-Overworld-01"));
     }
 }
+
