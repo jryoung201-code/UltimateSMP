@@ -45,3 +45,4 @@ final class TerritoryBorderGeometry {
             faces.add(new Face(xFixed, fixed, from, to, neighbor == null));
     }
 }
+

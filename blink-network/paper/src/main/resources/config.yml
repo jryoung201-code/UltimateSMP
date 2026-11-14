@@ -1,6 +1,14 @@
 # Install on every Paper backend, NOT on Velocity. Requires Java 21 / Paper 1.21.11.
 # Run once to create this file, configure, then fully restart. No /reload support.
 enabled: false
+# world = gameplay backend; queue = dedicated empty holding server (no database access).
+role: world
+queue-server: BlinkSMP-Queue-01
+all-dimensions: true
+worlds:
+  Overworld: world
+  Nether: world_nether
+  End: world_the_end
 server-id: BlinkSMP-Overworld-01
 # Local Bukkit world for THIS server's assigned dimension.
 world: world
@@ -9,7 +17,7 @@ bootstrap-server: BlinkSMP-Overworld-01
 import-local-players: false
 # Explicitly confirm Velocity modern forwarding and firewall/secret are configured.
 proxy-security-configured: false
-# Also set allow-nether=false / allow-end=false as appropriate for unused local worlds.
+# Set allow-nether=true in server.properties and allow-end=true in bukkit.yml.
 # Use JDBC syntax; credentials can instead be read from environment variables below.
 database:
   jdbc-url: ''
@@ -46,3 +54,4 @@ particle-border:
   height: 8
   server-color: '#33CCFF'
   unassigned-color: '#FF5555'
+

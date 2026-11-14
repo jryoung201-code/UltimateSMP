@@ -4,7 +4,7 @@ import java.util.UUID;
 
 public record Protocol(UUID player,UUID ticket,String target) {
     public static final String CHANNEL="blinksmp:network";
-    public Protocol { Region.dimensionOf(target); }
+    public Protocol { if(!target.matches("BlinkSMP-Queue-(0[1-9]|[1-9][0-9])"))Region.dimensionOf(target); }
     public byte[] bytes() throws IOException {
         var buffer=new ByteArrayOutputStream();var out=new DataOutputStream(buffer);
         out.writeInt(1);out.writeUTF(player.toString());out.writeUTF(ticket.toString());out.writeUTF(target);return buffer.toByteArray();
@@ -19,3 +19,4 @@ public record Protocol(UUID player,UUID ticket,String target) {
         } catch(IllegalArgumentException e) { throw new IOException("Invalid message",e); }
     }
 }
+

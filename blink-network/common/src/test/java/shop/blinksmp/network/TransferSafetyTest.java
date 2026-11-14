@@ -47,4 +47,12 @@ class TransferSafetyTest {
         assertTrue(guard.admit(UUID.randomUUID(),UUID.randomUUID(),1002));
         assertFalse(guard.admit(player,ticket,5000));assertTrue(guard.admit(player,UUID.randomUUID(),5000));
     }
+    @org.junit.jupiter.api.Test void physicalBackendCanOwnNetherAndEnd(){
+        String server="BlinkSMP-Overworld-01";
+        for(String dim:java.util.List.of("Nether","End")){
+            var owners=java.util.Map.of(new Region(dim,0,0),server);
+            var p=TransferSafety.landing(owners,server,dim,0.01,20,null);
+            org.junit.jupiter.api.Assertions.assertEquals(2.0,p.x());
+        }
+    }
 }

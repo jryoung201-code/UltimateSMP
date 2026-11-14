@@ -31,3 +31,4 @@ class TerritoryBorderGeometryTest {
         assertTrue(TerritoryBorderGeometry.near(owners,A,"Nether",2,2,24).isEmpty());
     }
 }
+

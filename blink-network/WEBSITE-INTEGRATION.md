@@ -25,3 +25,4 @@ No JWT/HTTP interface is implemented in this release. Plugins use PostgreSQL ove
 ## Terrain and migration
 
 The runtime does not yet produce tile imagery or process migration jobs. Render a coordinate grid/ownership overlay until terrain tiles are connected. A 9x9-chunk ownership region is not a 32x32-chunk .mca region file. Do not copy whole .mca files to implement reassignment, edit loaded world files, or imply the map editor has moved builds.
+
