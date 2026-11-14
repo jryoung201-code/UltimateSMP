@@ -27,3 +27,4 @@ public final class SnapshotPosition {
         if(bytes.length>2_097_152)throw new IllegalArgumentException("Rescued snapshot too large");return bytes;
     }
 }
+

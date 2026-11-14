@@ -17,3 +17,4 @@ class PolicyTest {
     @Test void routing(){var r=new NetworkStore.Route("handoff","A","A","B",UUID.randomUUID());assertEquals("B",r.loginServer());assertTrue(r.permits("A","B"));assertFalse(r.permits("X","B"));assertFalse(r.permits("A","C"));assertFalse(new NetworkStore.Route("active","A","A",null,null).permits("A","B"));}
 }
 
+

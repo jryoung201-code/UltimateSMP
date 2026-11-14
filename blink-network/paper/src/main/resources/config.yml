@@ -26,6 +26,7 @@ database:
   password: ''
 # Environment variables take precedence:
 # BLINK_NETWORK_JDBC_URL=jdbc:postgresql://HOST/DATABASE?sslmode=verify-full
+# Or jdbc:mariadb://HOST:3306/DATABASE?sslMode=verify-full (schema-mysql.sql)
 # BLINK_NETWORK_DB_USER=ROLE
 # BLINK_NETWORK_DB_PASSWORD=PASSWORD
 
@@ -55,4 +56,5 @@ particle-border:
   height: 8
   server-color: '#33CCFF'
   unassigned-color: '#FF5555'
+
 

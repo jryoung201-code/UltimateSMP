@@ -25,3 +25,4 @@ class SnapshotPositionTest {
         assertThrows(IllegalArgumentException.class,()->SnapshotPosition.relocate(valid,"Overworld",1,Double.POSITIVE_INFINITY,1));
     }
 }
+

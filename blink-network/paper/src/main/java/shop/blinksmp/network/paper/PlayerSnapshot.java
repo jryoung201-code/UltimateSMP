@@ -70,3 +70,4 @@ final class PlayerSnapshot {
     private static class RegionCheck {static void dimension(String d){if(!d.matches("Overworld|Nether|End"))throw new IllegalArgumentException("Invalid dimension");}}
 }
 
+

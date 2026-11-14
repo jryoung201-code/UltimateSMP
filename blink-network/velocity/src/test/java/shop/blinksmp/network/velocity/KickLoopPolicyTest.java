@@ -50,3 +50,4 @@ class KickLoopPolicyTest {
         assertFalse(BlinkNetworkProxy.isNetworkFailure(Optional.of(Component.text("Unsafe destination"))));
     }
 }
+

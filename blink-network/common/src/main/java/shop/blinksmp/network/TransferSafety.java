@@ -29,3 +29,4 @@ public final class TransferSafety {
         return now>=notBefore&&(Double.compare(fromX,toX)!=0||Double.compare(fromZ,toZ)!=0);
     }
 }
+

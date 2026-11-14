@@ -1,4 +1,23 @@
-# BlinkNetwork 0.4.1 — Overworld travel fixes
+# BlinkNetwork 0.5.0: PostgreSQL, MySQL and MariaDB
+
+The Paper backends and Velocity proxy can now use the same existing MySQL/MariaDB database, including host-provided databases. `jdbc:mysql:` and `jdbc:mariadb:` select the MySQL dialect; `jdbc:postgresql:` keeps the existing PostgreSQL dialect. Both JARs bundle the required drivers. Schema version remains 3. PostgreSQL users do not need to change database settings.
+
+MySQL uses isolated `blinksmp_network_v1_` table prefixes inside the selected database; it does not require CREATE DATABASE or alter other plugins' tables. Initialize with `common/src/main/resources/schema-mysql.sql` in the host database tool, or `blinknet schema` from a stopped/maintenance backend console after configuration. MySQL DDL implicitly commits; initialize while the network is offline and verify version 3 only after the full script succeeds. Existing PostgreSQL schema.sql is unchanged.
+
+All Paper backends AND Velocity must use the same database and upgraded JARs. Configure the existing `database.jdbc-url`, `database.username`, and `database.password` (or the existing BLINK_NETWORK_* environment overrides). Example (substitute the actual database name; keep credentials private):
+
+```yaml
+database:
+  jdbc-url: jdbc:mariadb://ny.sql.gravelhost.com:3306/YOUR_DATABASE?sslMode=verify-full
+  username: YOUR_DATABASE_USER
+  password: YOUR_DATABASE_PASSWORD
+```
+
+Check the host's TLS/certificate configuration and remote connection access from both Paper hosts and the proxy before cutover. Do not disable certificate validation as a workaround. MySQL 8.0+ / MariaDB 10.6+ with InnoDB and enforced CHECK constraints are required. CI verifies PostgreSQL 16, MySQL 8.4 and MariaDB 11.4. UUIDs use CHAR(36), snapshots/profile data use bounded binary blobs, and session fencing/row locks and optimistic profile revisions remain enforced. `useAffectedRows=false` is rejected because it breaks duplicate-profile detection.
+
+Changing databases does not copy inventory, rank, home, ownership or recovery data. While Neon is quota-blocked, its rows cannot be exported through the blocked connection. Preserve Neon, back up all local plugin/player files, and prepare a complete import before enabling joins on the new database. Do not initialize fresh inventory state for existing players without choosing the correct recovery source. The website map still uses its configured PostgreSQL connection; it requires its own adapter/configuration update to follow MySQL.
+
+# BlinkNetwork 0.5.0 — Overworld travel fixes
 
 Fallback RTP and /leave only select Overworld points. Paper publishes only verified Overworld samples, and the database rejects a fallback relocation into Nether or End even if a stale old point exists.
 
@@ -6,7 +25,7 @@ Use **/overworld** to return to a safe owned Overworld landing, preferring the c
 
 Nether portal returns retain vanilla scaled coordinates when their target region is assigned. If the scaled Overworld exit has no owner, a portal may use a verified safe Overworld landing instead. Homes and exact-coordinate teleports do not silently change their destination: an unassigned region now reports that it is outside assigned server regions. Genuine offline/maintenance targets stay blocked. No ownership rows or world chunks are reassigned automatically.
 
-Install **BlinkNetwork-Paper 0.4.1 on BOTH world backends** and **BlinkNetwork-Velocity 0.4.1 on the proxy**, replacing older JARs. Keep BlinkQueue 1.1.0 and LimboAPI 1.2.0 unchanged. Proxy remains on Java 25; gameplay Paper remains Java 21. Existing schema 3 and credentials remain unchanged. Restart all affected processes normally; no /reload.
+Install **BlinkNetwork-Paper 0.5.0 on BOTH world backends** and **BlinkNetwork-Velocity 0.5.0 on the proxy**, replacing older JARs. Keep BlinkQueue 1.1.0 and LimboAPI 1.2.0 unchanged. Proxy remains on Java 25; gameplay Paper remains Java 21. Existing schema 3 and credentials remain unchanged. Restart all affected processes normally; no /reload.
 
 Use **BlinkQueue 1.1.0 + LimboAPI 1.2.0** on Velocity for the restart queue. The dedicated Paper queue server is no longer needed. Follow [the current installation guide](../blink-queue/README.md). The world ownership, inventory/profile synchronization, border-loop protections and schema-3 session fencing remain in place.
 
@@ -23,3 +42,4 @@ Gameplay backends still own Overworld, Nether and End regions as configured. Mis
 Optional profile synchronization requires matching network-aware Ultimate plugin versions and the same choices on all backends. It does not automatically synchronize arbitrary plugin economies/trades. Crash recovery uses the last committed player checkpoint; world and inventory persistence are not globally crash-atomic.
 
 Console `blinknet rescue <UUID> <x> <y> <z>` remains offline-only, preserves inventory/profiles and uses an already-generated safe location in the backend's primary dimension. Active/handoff locks cannot be bypassed. Manual `blinknet recover <UUID> ALL_PLAYER_SERVER_PROCESSES_STOPPED` remains an explicit administrative recovery step requiring all possible old processes to be stopped.
+

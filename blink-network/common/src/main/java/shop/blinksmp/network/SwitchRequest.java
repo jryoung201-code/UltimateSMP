@@ -33,3 +33,4 @@ public record SwitchRequest(UUID player,UUID nonce,String target,long expiresAt)
         }catch(IllegalArgumentException ex){throw new IOException("Invalid request",ex);}
     }
 }
+
