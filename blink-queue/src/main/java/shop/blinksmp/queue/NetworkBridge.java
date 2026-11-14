@@ -21,3 +21,4 @@ final class NetworkBridge {
     }
     boolean recover(Player player,String origin){try{return Boolean.TRUE.equals(recovery.invoke(network,player,origin));}catch(Exception ex){return false;}}
 }
+
