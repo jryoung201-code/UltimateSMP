@@ -22,7 +22,7 @@ public final class SnapshotPosition {
             }
             lines[i]=line;
         }
-        if(seen.size()!=5)throw new IllegalArgumentException("Missing snapshot position");
+        if(seen.size()!=replacements.size())throw new IllegalArgumentException("Missing snapshot position");
         byte[] bytes=String.join("\n",lines).getBytes(StandardCharsets.UTF_8);
         if(bytes.length>2_097_152)throw new IllegalArgumentException("Rescued snapshot too large");return bytes;
     }
