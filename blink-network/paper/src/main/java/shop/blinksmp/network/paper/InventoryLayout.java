@@ -23,3 +23,4 @@ final class InventoryLayout {
         return Arrays.copyOf(saved,targetSlots);
     }
 }
+

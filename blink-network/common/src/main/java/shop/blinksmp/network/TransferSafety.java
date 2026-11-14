@@ -10,7 +10,7 @@ public final class TransferSafety {
     private TransferSafety() {}
     public static Point landing(Map<Region,String> owners,String server,String dimension,double x,double z,NetworkStore.Border border) {
         Region r=Region.at(dimension,x,z);
-        if(!dimension.equals(Region.dimensionOf(server))||!server.equals(owners.get(r)))throw new IllegalArgumentException("Destination has no matching owner");
+        if(!server.equals(owners.get(r)))throw new IllegalArgumentException("Destination has no matching owner");
         double minX=r.x()*144.0,maxX=minX+144,minZ=r.z()*144.0,maxZ=minZ+144;
         if(!server.equals(owners.get(new Region(dimension,r.x()-1,r.z()))))x=Math.max(x,minX+INSET);
         if(!server.equals(owners.get(new Region(dimension,r.x()+1,r.z()))))x=Math.min(x,maxX-INSET);

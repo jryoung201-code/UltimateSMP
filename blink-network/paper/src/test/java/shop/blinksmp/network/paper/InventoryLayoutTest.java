@@ -34,3 +34,4 @@ class InventoryLayoutTest {
         assertThrows(IllegalArgumentException.class,()->InventoryLayout.adapt(modern,41));
     }
 }
+

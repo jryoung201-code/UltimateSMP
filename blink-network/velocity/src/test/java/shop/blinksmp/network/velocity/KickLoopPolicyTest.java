@@ -43,4 +43,10 @@ class KickLoopPolicyTest {
         var event=new KickedFromServerEvent(player(null),lobby,Component.text("Other network"),true,original);
         BlinkNetworkProxy.preventKickRedirect(event);assertSame(original,event.getResult());
     }
+    @Test void unexpectedDisconnectCanQueueButSuppliedModerationReasonsCannot(){
+        assertTrue(BlinkNetworkProxy.isNetworkFailure(Optional.empty()));
+        assertTrue(BlinkNetworkProxy.isNetworkFailure(Optional.of(Component.translatable("velocity.error.internal-server-connection-error"))));
+        assertFalse(BlinkNetworkProxy.isNetworkFailure(Optional.of(Component.text("Banned"))));
+        assertFalse(BlinkNetworkProxy.isNetworkFailure(Optional.of(Component.text("Unsafe destination"))));
+    }
 }

@@ -60,3 +60,30 @@ CREATE TABLE IF NOT EXISTS blinksmp_network_v1.world_borders (
 );
 
 UPDATE blinksmp_network_v1.meta SET version=2 WHERE id=1 AND version=1;
+
+
+-- v3: physical backends may host all three dimensions, restart draining and safe RTP.
+ALTER TABLE blinksmp_network_v1.servers ADD COLUMN IF NOT EXISTS all_dimensions boolean NOT NULL DEFAULT false;
+ALTER TABLE blinksmp_network_v1.servers ADD COLUMN IF NOT EXISTS maintenance boolean NOT NULL DEFAULT false;
+ALTER TABLE blinksmp_network_v1.regions DROP CONSTRAINT IF EXISTS regions_server_id_dimension_fkey;
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.retired_instances (
+ server_id text NOT NULL REFERENCES blinksmp_network_v1.servers(id), instance uuid NOT NULL,
+ PRIMARY KEY(server_id,instance)
+);
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.queue_requests (
+ player_id uuid PRIMARY KEY REFERENCES blinksmp_network_v1.players(player_id),
+ origin text NOT NULL REFERENCES blinksmp_network_v1.servers(id), ticket uuid NOT NULL,
+ created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.rtp_points (
+ server_id text NOT NULL REFERENCES blinksmp_network_v1.servers(id), dimension text NOT NULL CHECK(dimension IN ('Overworld','Nether','End')),
+ x double precision NOT NULL, y double precision NOT NULL, z double precision NOT NULL,
+ heartbeat timestamptz NOT NULL DEFAULT now(), PRIMARY KEY(server_id,dimension)
+);
+UPDATE blinksmp_network_v1.meta SET version=3 WHERE id=1 AND version=2;
+
+CREATE TABLE IF NOT EXISTS blinksmp_network_v1.queue_status (
+ id text PRIMARY KEY, heartbeat timestamptz NOT NULL DEFAULT now(), ready boolean NOT NULL DEFAULT false
+);
+
+ALTER TABLE blinksmp_network_v1.players ADD COLUMN IF NOT EXISTS owner_instance uuid;

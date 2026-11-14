@@ -11,3 +11,4 @@ public record Region(String dimension,int x,int z) {
         return server.split("-")[1];
     }
 }
+

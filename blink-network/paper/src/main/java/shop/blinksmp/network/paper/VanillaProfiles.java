@@ -113,3 +113,4 @@ final class VanillaProfiles {
         } else throw new IOException("Unsupported vanilla category");
     }
 }
+

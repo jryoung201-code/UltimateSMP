@@ -9,6 +9,7 @@ class DatabaseTest {
     NetworkStore db;static final String A="BlinkSMP-Overworld-01",B="BlinkSMP-Overworld-02";
     @BeforeEach void setup()throws Exception{
         Assumptions.assumeTrue(System.getenv("TEST_JDBC_URL")!=null,"Set TEST_JDBC_URL to run PostgreSQL integration tests");
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres");Statement q=c.createStatement()){q.execute("DROP SCHEMA IF EXISTS blinksmp_network_v1 CASCADE");}
         db=new NetworkStore(System.getenv("TEST_JDBC_URL"),"postgres","postgres");db.initialize();db.verify();db.register(A);db.register(B);db.enable(A,true);db.enable(B,true);db.heartbeat(A,UUID.randomUUID());db.heartbeat(B,UUID.randomUUID());
     }
     @AfterEach void close(){if(db!=null)db.close();}
@@ -143,5 +144,60 @@ class DatabaseTest {
         assertThrows(SQLException.class,()->db.rescueOffline(p,A,(r.x()+1)*144.0+20,72,r.z()*144.0+20));
         assertArrayEquals(bytes,db.claim(p,A,UUID.randomUUID(),false));
     }
+    @Test void backendMirrorsOwnedRegionsIntoBothOtherDimensions()throws Exception{
+        db.dimensions(A,true);Region ow=new Region("Overworld",7,-2);db.assign(ow,A);
+        assertEquals(A,db.assignments().get(new Region("Nether",7,-2)));
+        assertEquals(A,db.assignments().get(new Region("End",7,-2)));
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] snapshot=SnapshotPosition.relocate(position(7*144+20,-2*144+20),"Nether",7*144+20,70,-2*144+20);
+        db.save(p,session,snapshot,true);assertEquals(A,db.loginTarget(p,db.route(p)));
+        assertArrayEquals(snapshot,db.claim(p,A,UUID.randomUUID(),false));
+        db.dimensions(B,true);db.assign(new Region("Nether",7,-2),B);
+        assertEquals(B,db.assignments().get(new Region("Nether",7,-2)));
+        assertEquals(A,db.assignments().get(new Region("End",7,-2)));
+    }
+    @Test void maintenanceBlocksHandoffAndRtpButRetainsHeartbeat()throws Exception{
+        assertTrue(db.ready(B));db.maintenance(B,true);assertFalse(db.ready(B));assertTrue(db.anyMaintenance());
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);db.save(p,session,position(12,12),false);
+        assertFalse(db.prepare(p,session,B,UUID.randomUUID(),position(12,12),position(160,12)));
+        db.maintenance(B,false);assertTrue(db.ready(B));
+    }
+    @Test void restartQueueReleasesOnlyExactSessionAndPreservesInventory()throws Exception{
+        db.assign(new Region("Overworld",0,0),A);
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] snapshot=position(12,12);db.save(p,session,snapshot,false);
+        assertFalse(db.queue(p,UUID.randomUUID(),A,ticket,snapshot));assertEquals("active",db.route(p).state());
+        assertTrue(db.queue(p,session,A,ticket,snapshot));assertTrue(db.queued(p,A,ticket));assertFalse(db.queued(p,B,ticket));
+        assertEquals("offline",db.route(p).state());assertFalse(db.save(p,session,new byte[]{9},true));
+        assertArrayEquals(snapshot,db.claim(p,A,UUID.randomUUID(),false));
+    }
+    @Test void deadServerRecoveryWaitsThenPermanentlyFencesOldInstance()throws Exception{
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID(),instance=UUID.randomUUID();String server="BlinkSMP-End-98";
+        db.register(server);db.enable(server,true);assertTrue(db.heartbeat(server,instance));db.claim(p,server,session,true);
+        db.save(p,session,position(12,12),false);assertFalse(db.releaseDeadSession(p));assertEquals("active",db.route(p).state());
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres");Statement q=c.createStatement()){q.execute("UPDATE blinksmp_network_v1.servers SET heartbeat=now()-interval '46 seconds' WHERE id='"+server+"'");}
+        assertTrue(db.releaseDeadSession(p));assertEquals("offline",db.route(p).state());
+        assertFalse(db.heartbeat(server,instance));assertFalse(db.save(p,session,new byte[]{9},true));
+        assertTrue(db.heartbeat(server,UUID.randomUUID()));
+    }
+    @Test void rtpMovesOnlyOfflineSnapshotAndKeepsItemData()throws Exception{
+        db.assign(new Region("Overworld",1,0),B);db.publishRtp(new NetworkStore.Rtp(B,"Overworld",164,72,20));
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);byte[] before=position(12,12);db.save(p,session,before,false);
+        var points=db.rtpPoints(A);assertEquals(1,points.size());
+        assertThrows(SQLException.class,()->db.rerouteOffline(p,points.getFirst()));
+        db.save(p,session,before,true);assertTrue(db.rerouteOffline(p,points.getFirst()));assertEquals(B,db.loginTarget(p,db.route(p)));assertTrue(db.rtpPending(p));
+        String after=new String(db.claim(p,B,UUID.randomUUID(),false),java.nio.charset.StandardCharsets.UTF_8);
+        assertTrue(after.contains("inventory: PRESERVE_ITEM_NBT"));assertTrue(after.contains("rtp-arrival: true"));
+        db.maintenance(B,true);assertTrue(db.rtpPoints(A).isEmpty());
+    }
+
+    @Test void restartedProcessCanRecoverOrphanWithoutFencingItsNewInstance()throws Exception{
+        String server="BlinkSMP-End-97";UUID old=UUID.randomUUID(),fresh=UUID.randomUUID(),p=UUID.randomUUID(),session=UUID.randomUUID();
+        db.register(server);db.enable(server,true);db.heartbeat(server,old);db.claim(p,server,session,true);db.save(p,session,position(12,12),false);
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres");Statement q=c.createStatement()){q.execute("UPDATE blinksmp_network_v1.servers SET heartbeat=now()-interval '46 seconds' WHERE id='"+server+"'");}
+        assertTrue(db.heartbeat(server,fresh));assertTrue(db.releaseDeadSession(p));
+        assertFalse(db.heartbeat(server,old));assertTrue(db.heartbeat(server,fresh));assertTrue(db.ready(server));
+    }
+
 }
 
