@@ -13,7 +13,7 @@ public final class HomePermissionTest {
             case "isEnabled"->true;case "getName"->"UltimateRanksTest";case "toString"->"UltimateRanksTest";default->null;
         });
         Permissible holder=(Permissible)Proxy.newProxyInstance(Permissible.class.getClassLoader(),new Class<?>[]{Permissible.class},(p,m,a)->null);
-        Rank[] ranks={Rank.BLINK_PLUS,Rank.BLINK_PLUS_PLUS,Rank.BLINK_PLUS_PLUS_PLUS};
+        Rank[] ranks={Rank.ULTIMATE_PLUS,Rank.ULTIMATE_PLUS_PLUS,Rank.ULTIMATE_PLUS_PLUS_PLUS};
         String[] expected={"maxhomes.3","maxhomes.5","maxhomes.9"};
         for(int i=0;i<ranks.length;i++) {
             PermissionAttachment attachment=new PermissionAttachment(plugin,holder);
@@ -28,7 +28,7 @@ public final class HomePermissionTest {
         PermissionAttachment owner=new PermissionAttachment(plugin,holder);
         UltimateRanks.grantHomePermission(owner,Rank.OWNER);
         if(!owner.getPermissions().equals(Map.of("maxhomes.unlimited",true)))throw new AssertionError("OWNER must have unlimited homes");
-        System.out.println("PASS: exact Bukkit home permission grants for Blink ranks; legacy ranks unaffected");
+        System.out.println("PASS: exact Bukkit home permission grants for Ultimate ranks; legacy ranks unaffected");
     }
 }
 

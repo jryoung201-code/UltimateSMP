@@ -43,7 +43,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private static final Set<String> MUTED_COMMANDS=Set.of("me","say","msg","tell","w","whisper","r","reply","pm","message","emsg","etell","ew","eme");
 
     @Override public void onEnable() {
-        saveDefaultConfig();getConfig().options().copyDefaults(true);saveConfig();
+        saveDefaultConfig();RankConfig.migrate(getConfig());getConfig().options().copyDefaults(true);saveConfig();
         try { store=new RankStore(getDataFolder().toPath().resolve("players.yml")); }
         catch(Exception ex) {
             getLogger().severe("Cannot load players.yml; file preserved. Fix it before enabling UltimateRanks: "+ex);
@@ -156,6 +156,8 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         a.setPermission("ultimatehomes.admin",r.level>=Rank.ADMIN.level);
         Set<Rank> assigned=store.get(id).ranks();
         for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),assigned.contains(v));
+        for(Rank v:Rank.values())if(v.name().startsWith("ULTIMATE_PLUS"))
+            a.setPermission("ultimateranks.rank."+v.name().replace("ULTIMATE","BLINK").toLowerCase(Locale.ROOT),assigned.contains(v));
         for(Rank v:assigned) {
             grantHomePermission(a,v);
             for(String perm:getConfig().getStringList("extra-permissions."+v.name())) a.setPermission(perm,true);

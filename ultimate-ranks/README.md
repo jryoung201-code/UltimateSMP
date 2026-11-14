@@ -1,4 +1,8 @@
-# UltimateRanks 1.2.0
+# Ultimate donor rank naming
+
+Ultimate+, Ultimate++ and Ultimate+++ replace the old Blink donor names. Existing player assignments, custom weights, permissions and prefix formatting migrate automatically. Old Blink names remain accepted as command/data aliases; new saves use ULTIMATE_PLUS identifiers. Old `ultimateranks.rank.blink_plus` permission nodes remain aliases for integrations. Upgrade UltimateRanks on every Paper backend together. UltimateHomes 1.1.0 and UltimateSettings 1.1.0 remain compatible and do not need another update.
+
+# UltimateRanks 1.2.1
 
 A player can hold multiple ranks. Existing `rank` entries migrate automatically to a `ranks` list on the next save. Names, UUIDs and sanctions are preserved.
 
@@ -8,9 +12,9 @@ A player can hold multiple ranks. Existing `rank` entries migrate automatically 
 - `/rank remove <player-or-uuid>` resets all memberships to MEMBER (legacy behavior).
 - `/rank info [player]` lists every rank and the visible rank; `/rank list` shows weights.
 
-`weights` in `plugins/UltimateRanks/config.yml` determines the single tag used in chat and TAB. Higher weights appear first in TAB. Equal display weights use stable enum order; equal player weights sort by name then UUID. Defaults are OWNER 600, DEV 500, ADMIN 400, MOD 300, TRIAL_MOD 200, HELPER 100, Blink+++ 30, Blink++ 20, Blink+ 10, MEMBER 0. Existing configs gain these defaults while retaining custom settings. Restart after changes.
+`weights` in `plugins/UltimateRanks/config.yml` determines the single tag used in chat and TAB. Higher weights appear first in TAB. Equal display weights use stable enum order; equal player weights sort by name then UUID. Defaults are OWNER 600, DEV 500, ADMIN 400, MOD 300, TRIAL_MOD 200, HELPER 100, Ultimate+++ 30, Ultimate++ 20, Ultimate+ 10, MEMBER 0. Existing configs gain these defaults while retaining custom settings. Restart after changes.
 
-Permissions from every assigned rank combine. Blink+ grants `maxhomes.3`, Blink++ grants `maxhomes.5`, Blink+++ grants `maxhomes.9`. OWNER grants `maxhomes.unlimited`, independently of which tag is visible. ADMIN and higher get `ultimatehomes.admin` for `/maxhomes`.
+Permissions from every assigned rank combine. Ultimate+ grants `maxhomes.3`, Ultimate++ grants `maxhomes.5`, Ultimate+++ grants `maxhomes.9`. OWNER grants `maxhomes.unlimited`, independently of which tag is visible. ADMIN and higher get `ultimatehomes.admin` for `/maxhomes`.
 
 Display weights never change the fixed staff authority hierarchy. Rank management still requires ADMIN or higher and can only affect players and ranks below the actor; only console can assign OWNER. No automatic staff assignment or OP.
 
@@ -57,15 +61,15 @@ command is provided.
 
 | Rank | Built-in permission | Maximum homes |
 | --- | --- | ---: |
-| Blink+ | `maxhomes.3` | 3 |
-| Blink++ | `maxhomes.5` | 5 |
-| Blink+++ | `maxhomes.9` | 9 |
+| Ultimate+ | `maxhomes.3` | 3 |
+| Ultimate++ | `maxhomes.5` | 5 |
+| Ultimate+++ | `maxhomes.9` | 9 |
 
-Add alongside existing ranks with `/rank add PlayerName Blink+`, `/rank add PlayerName Blink++`, or
-`/rank add PlayerName Blink+++`. Console uses the same commands without `/`.
+Add alongside existing ranks with `/rank add PlayerName Ultimate+`, `/rank add PlayerName Ultimate++`, or
+`/rank add PlayerName Ultimate+++`. Console uses the same commands without `/`.
 ADMIN and higher can assign these ranks to lower-ranked players. Names with
 pluses are accepted case-insensitively, appear in chat/TAB, and autocomplete.
-The stored names are `BLINK_PLUS`, `BLINK_PLUS_PLUS`, `BLINK_PLUS_PLUS_PLUS`;
+The stored names are `ULTIMATE_PLUS`, `ULTIMATE_PLUS_PLUS`, `ULTIMATE_PLUS_PLUS_PLUS`;
 these are also the optional prefix/extra-permission config keys.
 
 These player ranks have the same moderation level as MEMBER and grant no staff

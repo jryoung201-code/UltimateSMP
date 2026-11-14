@@ -7,9 +7,9 @@ weights:
   MOD: 300
   TRIAL_MOD: 200
   HELPER: 100
-  BLINK_PLUS_PLUS_PLUS: 30
-  BLINK_PLUS_PLUS: 20
-  BLINK_PLUS: 10
+  ULTIMATE_PLUS_PLUS_PLUS: 30
+  ULTIMATE_PLUS_PLUS: 20
+  ULTIMATE_PLUS: 10
   MEMBER: 0
 
 prefixes:
@@ -19,9 +19,9 @@ prefixes:
   MOD: '&2&l[MOD] &r'
   TRIAL_MOD: '&e[TRIAL MOD] &r'
   HELPER: '&a[HELPER] &r'
-  BLINK_PLUS: '&b[Blink+] &r'
-  BLINK_PLUS_PLUS: '&d[Blink++] &r'
-  BLINK_PLUS_PLUS_PLUS: '&6[Blink+++] &r'
+  ULTIMATE_PLUS: '&b[Ultimate+] &r'
+  ULTIMATE_PLUS_PLUS: '&d[Ultimate++] &r'
+  ULTIMATE_PLUS_PLUS_PLUS: '&6[Ultimate+++] &r'
   MEMBER: '&7[MEMBER] &r'
 # Grants from every assigned rank combine; staff hierarchy remains fixed.
 # Never grants OP or wildcard '*'.
@@ -33,11 +33,11 @@ extra-permissions:
   MOD: []
   TRIAL_MOD: []
   HELPER: []
-  BLINK_PLUS: []
-  BLINK_PLUS_PLUS: []
-  BLINK_PLUS_PLUS_PLUS: []
+  ULTIMATE_PLUS: []
+  ULTIMATE_PLUS_PLUS: []
+  ULTIMATE_PLUS_PLUS_PLUS: []
   MEMBER: []
 
-# Blink home limits (3/5/9) are built in and also apply with older configs.
+# Ultimate home limits (3/5/9) are built in and also apply with older configs.
 # Extra permissions are additive; another higher maxhomes.# permission still wins.
 

@@ -31,8 +31,8 @@ jobs:
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.ranks.MultiRankTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateRanks-1.2.0
-          path: ultimate-ranks/target/UltimateRanks-1.2.0.jar
+          name: UltimateRanks-1.2.1
+          path: ultimate-ranks/target/UltimateRanks-1.2.1.jar
           if-no-files-found: error
 
 
