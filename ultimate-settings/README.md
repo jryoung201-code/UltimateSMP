@@ -1,3 +1,7 @@
+# UltimateSettings 1.1.0 rank compatibility
+
+The personal rank-tag toggle now uses UltimateRanks 1.2.0's weighted visible rank. Scoreboard teams are distinct for MEMBER and each Blink donor rank, so those prefixes cannot overwrite each other. Teams sort by the configured weight; equal weights sort by rank name. Old UltimateRanks builds fall back to the existing staff order. Empty teams are cleaned up. Existing personal settings, monster spawning preferences and network profile APIs are unchanged.
+
 # UltimateSettings 1.0.1
 
 Paper 1.21.11 / Java 21. Every player can use `/settings` (aliases `/prefs` and
@@ -123,3 +127,4 @@ requires a server-side spawning implementation change beyond this setting.
 Tests cover monster-only/natural-only filtering, overlapping players, disabled
 spawn participation, ranges, preference isolation and migration from old saves.
 Live world spawning behavior and other plugins' overrides still need testing.
+

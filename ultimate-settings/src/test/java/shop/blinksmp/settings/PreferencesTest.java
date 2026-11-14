@@ -28,3 +28,4 @@ public final class PreferencesTest {
         System.out.println("PASS: "+checks+" preference isolation and chunk-cap checks");
     }
 }
+

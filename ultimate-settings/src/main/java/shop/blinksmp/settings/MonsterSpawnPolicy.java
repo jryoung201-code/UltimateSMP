@@ -22,3 +22,4 @@ public final class MonsterSpawnPolicy {
         return excludedInRange;
     }
 }
+

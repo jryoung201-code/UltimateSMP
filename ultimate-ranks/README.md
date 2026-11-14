@@ -14,7 +14,7 @@ Permissions from every assigned rank combine. Blink+ grants `maxhomes.3`, Blink+
 
 Display weights never change the fixed staff authority hierarchy. Rank management still requires ADMIN or higher and can only affect players and ranks below the actor; only console can assign OWNER. No automatic staff assignment or OP.
 
-With BlinkNetwork profile sync enabled, all memberships are exported in the existing ranks module; sanctions remain separate. Upgrade UltimateRanks on every Paper backend together to avoid an old single-rank build flattening memberships. UltimateHomes 1.1.0 is required for unlimited homes. Install these on Paper, not Velocity.
+With BlinkNetwork profile sync enabled, all memberships are exported in the existing ranks module; sanctions remain separate. Upgrade UltimateRanks on every Paper backend together to avoid an old single-rank build flattening memberships. UltimateHomes 1.1.0 is required for unlimited homes. Install these on Paper, not Velocity. If using UltimateSettings for personal rank tags, update it to 1.1.0 too; older versions group donor ranks with MEMBER.
 
 # UltimateRanks 1.0.3
 

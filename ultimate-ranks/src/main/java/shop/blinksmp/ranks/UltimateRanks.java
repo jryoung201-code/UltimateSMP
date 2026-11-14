@@ -77,6 +77,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
 
     private Rank rank(UUID id) { return store.get(id).rank(); }
     private Rank displayRank(UUID id) { return Rank.display(store.get(id).ranks(),weights); }
+    public int getRankWeight(UUID id) { return weights.get(displayRank(id)); }
     public String getRankName(UUID id) { return displayRank(id).name(); }
     public String getRankPrefix(UUID id) {
         Rank r=displayRank(id);
