@@ -33,3 +33,4 @@ class SwitchRequestTest {
         assertTrue(guard.admit(UUID.randomUUID(),120_000,60_000));
     }
 }
+

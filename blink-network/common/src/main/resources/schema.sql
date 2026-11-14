@@ -87,3 +87,4 @@ CREATE TABLE IF NOT EXISTS blinksmp_network_v1.queue_status (
 );
 
 ALTER TABLE blinksmp_network_v1.players ADD COLUMN IF NOT EXISTS owner_instance uuid;
+

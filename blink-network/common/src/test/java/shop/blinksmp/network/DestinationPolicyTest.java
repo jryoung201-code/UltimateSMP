@@ -15,3 +15,4 @@ class DestinationPolicyTest {
         assertTrue(DestinationPolicy.issue(true,true,true,"world",true).contains("restarting"));
     }
 }
+

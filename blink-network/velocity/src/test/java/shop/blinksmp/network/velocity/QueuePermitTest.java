@@ -22,3 +22,4 @@ class QueuePermitTest {
         assertTrue(QueuePermit.routeAllows(null,"bootstrap","bootstrap"));
     }
 }
+

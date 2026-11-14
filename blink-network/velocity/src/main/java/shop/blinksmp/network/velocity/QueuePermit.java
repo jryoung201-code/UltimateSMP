@@ -10,3 +10,4 @@ record QueuePermit(String target,long expiresAt,String intent){
         return Objects.equals(authoritative,requested)&&(route==null||route.state().equals("offline")||route.state().equals("handoff"));
     }
 }
+

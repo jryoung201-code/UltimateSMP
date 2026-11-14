@@ -202,3 +202,4 @@ public final class BlinkNetworkProxy {
     }
     @Subscribe public void stop(ProxyShutdownEvent event){ready=false;io.shutdown();try{io.awaitTermination(15,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}if(db!=null)db.close();}
 }
+

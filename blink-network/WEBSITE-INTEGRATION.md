@@ -46,3 +46,4 @@ FROM effective ORDER BY dimension,region_x,region_z,priority;
 ```
 
 The old composite dimension FK is removed by the migration. Validate new explicit owners against `all_dimensions OR servers.dimension=region.dimension` in the authenticated admin API. Do not silently turn a mirror into a reassignment or overwrite existing owned terrain; ownership migration remains a separate offline operation. Display `servers.maintenance` as maintenance even when its heartbeat is fresh. Queue is registered in Velocity, not as a terrain owner in the servers table. Never let the browser mutate player locks, queue tickets, retired instances, RTP points or queue health; those are trusted plugin-only state. Back up and migrate with all old plugin processes stopped.
+

@@ -38,3 +38,4 @@ final class QueueLobby implements Listener {
     @EventHandler public void commands(PlayerCommandSendEvent e){e.getCommands().clear();}
     @EventHandler public void command(PlayerCommandPreprocessEvent e){e.setCancelled(true);}
 }
+
