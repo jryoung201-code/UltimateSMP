@@ -43,7 +43,7 @@ For abrupt socket failures, enable `failover-on-unexpected-server-disconnect = t
 
 ## Compatibility and testing
 
-Builds target Java 25 and use the published LimboAPI API, not hand-built Minecraft packets. CI compiles and runs policy tests for bounded deadlines, startup configuration and moderation handling, plus the existing BlinkNetwork/PostgreSQL regression suite. No live host endpoint, production inventory, proxy session or backend is changed by the build.
+Builds target Java 25 and use the official LimboAPI release API, not hand-built Minecraft packets. Because 1.2.0 is not yet published in its Maven repository, CI downloads the official 1.2.0 JAR, verifies its SHA-256 against the GitHub release digest, and installs it locally as a provided-only compile dependency. It is never included in the BlinkQueue JAR. Follow the same preparation step in `.github/workflows/queue.yml` when building locally. CI compiles and runs policy tests for bounded deadlines, startup configuration and moderation handling, plus the existing BlinkNetwork/PostgreSQL regression suite. No live host endpoint, production inventory, proxy session or backend is changed by the build.
 
 Stage a Java 1.21.11 join and a Geyser/Floodgate Bedrock join using your exact Velocity/LimboAPI versions, including a planned restart, sudden backend loss, failed queue boot, a ban, and a client disconnect during limbo. Configure Floodgate's required pre-limbo profile hooks according to LimboAPI/Floodgate documentation before opening Bedrock access. Packet-level compatibility and host startup behavior are not established merely by compilation.
 

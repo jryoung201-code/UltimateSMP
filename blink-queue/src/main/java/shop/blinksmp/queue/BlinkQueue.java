@@ -46,6 +46,7 @@ public final class BlinkQueue {
         final WaitBudget budget;
         volatile LimboPlayer virtual;
         volatile boolean checking,departing;
+        final AtomicBoolean spawning=new AtomicBoolean();
         volatile long departedAt;
         Attempt(Player player,WaitBudget budget,boolean checking){this.player=player;this.budget=budget;this.checking=checking;}
     }
@@ -109,7 +110,7 @@ public final class BlinkQueue {
         Attempt existing=attempts.get(player.getUniqueId());
         if(existing!=null){
             if(existing.budget.expired(System.nanoTime())){fail(existing,"Queue startup timed out. Please try joining again later.");return null;}
-            if(existing.virtual!=null&&!existing.departing)return existing;
+            if((existing.virtual!=null||existing.spawning.get())&&!existing.departing)return existing;
             existing.departing=false;existing.checking=checkRoute;spawn(existing);return existing;
         }
         if(!capacity.tryAcquire()){player.disconnect(Component.text("The starting queue is full. Please try again shortly."));return null;}
@@ -119,15 +120,16 @@ public final class BlinkQueue {
         spawn(a);return a;
     }
     private void spawn(Attempt a){
+        if(!a.spawning.compareAndSet(false,true))return;
         try {limbo.spawnPlayer(a.player,new LimboSessionHandler(){
             private LimboPlayer own;
             @Override public void onSpawn(Limbo server,LimboPlayer player){
                 if(!ready||attempts.get(a.player.getUniqueId())!=a){a.player.disconnect(Component.text("Queue session expired. Please reconnect."));return;}
-                own=player;a.virtual=player;player.disableFalling();
+                a.spawning.set(false);own=player;a.virtual=player;player.disableFalling();
                 if(a.checking)checkRoute(a);else {show(a);wakeQueue();}
             }
             @Override public void onMove(double x,double y,double z){
-                if(own!=null&&(y<64||y>72||Math.abs(x)>4||Math.abs(z)>4))own.teleport(0.5,65,0.5,0,0);
+                if(a.virtual==own&&own!=null&&(y<64||y>72||Math.abs(x)>4||Math.abs(z)>4))own.teleport(0.5,65,0.5,0,0);
             }
             @Override public void onDisconnect(){if(a.virtual==own)a.virtual=null;}
         });}catch(Exception|LinkageError ex){fail(a,"The waiting room could not load. Please reconnect later.");log.warn("Limbo spawn failed ({}).",ex.getClass().getSimpleName());}
@@ -167,7 +169,8 @@ public final class BlinkQueue {
                 a.virtual.disconnect(proxy.getServer(config.queue()).orElseThrow());
             }
         }
-        if(!attempts.isEmpty()||now<demandUntil.get())probe();
+        long demand=demandUntil.get();
+        if(!attempts.isEmpty()||(demand!=0&&now-demand<0))probe();
     }
     private void probe(){
         if(!ready||!probing.compareAndSet(false,true))return;

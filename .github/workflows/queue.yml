@@ -17,6 +17,11 @@ jobs:
           distribution: temurin
           java-version: '25'
           cache: maven
+      - name: Install pinned official LimboAPI release for compilation
+        run: |
+          curl --fail --location --proto '=https' --tlsv1.2 --output "$RUNNER_TEMP/limboapi-1.2.0.jar" https://github.com/Elytrium/LimboAPI/releases/download/1.2.0/limboapi-1.2.0.jar
+          echo "25582ebf5567fec1c20a03ad2c6e01fa05911a76749c67e7b0192acf508f7d31  $RUNNER_TEMP/limboapi-1.2.0.jar" | sha256sum --check
+          mvn -B -ntp org.apache.maven.plugins:maven-install-plugin:3.1.4:install-file -Dfile="$RUNNER_TEMP/limboapi-1.2.0.jar" -DgroupId=net.elytrium.limboapi -DartifactId=api -Dversion=1.2.0 -Dpackaging=jar -DgeneratePom=true
       - name: Build and test waiting room
         run: mvn -B -ntp -f blink-queue/pom.xml verify
       - if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
