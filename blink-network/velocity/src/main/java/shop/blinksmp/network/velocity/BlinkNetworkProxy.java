@@ -20,6 +20,7 @@ public final class BlinkNetworkProxy {
     private final ProxyServer proxy;private final Logger log;private final Path directory;
     private final ExecutorService io=Executors.newFixedThreadPool(2,r->new Thread(r,"BlinkNetwork-ProxyDB"));
     private static final MinecraftChannelIdentifier CHANNEL=MinecraftChannelIdentifier.from(Protocol.CHANNEL);
+    private final TransferThrottle transferThrottle=new TransferThrottle();
     private NetworkStore db;private String bootstrap;private volatile boolean active,ready;
     @Inject public BlinkNetworkProxy(ProxyServer proxy,Logger log,@DataDirectory Path directory){this.proxy=proxy;this.log=log;this.directory=directory;}
     @Subscribe public void start(ProxyInitializeEvent event){
@@ -67,10 +68,26 @@ public final class BlinkNetworkProxy {
                     if(!player.isActive()||player.getCurrentServer().filter(c->c==source).isEmpty())return;
                     NetworkStore.Route route=db.route(player.getUniqueId());
                     if(route==null||!route.permits(from,request.target())||!request.ticket().equals(route.ticket())||!db.ready(request.target()))return;
+                    if(!transferThrottle.admit(player.getUniqueId(),request.ticket(),System.currentTimeMillis())){
+                        player.sendMessage(Component.text("Repeated border transfer paused; your source server will return you safely."));return;
+                    }
                     proxy.getServer(request.target()).ifPresent(server->player.createConnectionRequest(server).connect().exceptionally(ex->{log.warn("Backend transfer failed; source will recover its pending handoff.");return null;}));
                 }catch(Exception ex){log.warn("Transfer verification failed ({}). Source will cancel safely.",ex.getClass().getSimpleName());}
             });
         }catch(IOException ignored){}
     }
+    @Subscribe(order=PostOrder.LAST) public void kicked(KickedFromServerEvent event){
+        if(active)preventKickRedirect(event);
+    }
+    static void preventKickRedirect(KickedFromServerEvent event){
+        try{Region.dimensionOf(event.getServer().getServerInfo().getName());}catch(IllegalArgumentException ignored){return;}
+        // Never hide a moderation disconnect, or bounce a rejected login to a different world copy.
+        if(event.getResult() instanceof KickedFromServerEvent.DisconnectPlayer)return;
+        Component reason=event.getServerKickReason().orElse(Component.text("BlinkSMP destination unavailable. Contact staff if reconnecting fails."));
+        boolean hasSource=event.kickedDuringServerConnect()&&event.getPlayer().getCurrentServer()
+            .filter(c->!c.getServerInfo().getName().equals(event.getServer().getServerInfo().getName())).isPresent();
+        event.setResult(hasSource?KickedFromServerEvent.Notify.create(reason):KickedFromServerEvent.DisconnectPlayer.create(reason));
+    }
     @Subscribe public void stop(ProxyShutdownEvent event){ready=false;io.shutdown();try{io.awaitTermination(15,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}if(db!=null)db.close();}
 }
+

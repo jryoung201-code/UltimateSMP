@@ -36,6 +36,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         final UUID token=UUID.randomUUID();volatile byte[] data;
         volatile boolean frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
         volatile UUID ticket;volatile String transferTarget;volatile long freezeAt=System.currentTimeMillis();
+        Location lastOwned;boolean borderQueued;long automaticAfter;
         volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
         // Owned by the serialized I/O queue after the async prelogin claim.
         final Map<String,Long> profileVersions=new HashMap<>();
@@ -166,23 +167,26 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 if(s.data==null){
                     if(p.getWorld()!=world)throw new IllegalStateException("Import player is outside the assigned dimension");
                     Region r=Region.at(dimension,p.getX(),p.getZ());if(!id.equals(regions.get(r)))throw new IllegalStateException("Import spawn region must be assigned to this server");
-                    s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();s.loaded=true;checkpointInitial(p,s);return;
+                    s.data=PlayerSnapshot.capture(p,dimension,sourceLocation(p,s)).bytes();s.loaded=true;checkpointInitial(p,s);return;
                 }
                 PlayerSnapshot snapshot=PlayerSnapshot.decode(s.data);
                 if(!dimension.equals(snapshot.dimension()))throw new IllegalStateException("Snapshot dimension differs from destination");
-                Location dest=snapshot.location(world);
-                if(!id.equals(regions.get(Region.at(dimension,dest.getX(),dest.getZ()))))throw new IllegalStateException("Destination region is not owned by this server");
+                Location requested=snapshot.location(world);
+                TransferSafety.Point landing=TransferSafety.landing(regions,id,dimension,requested.getX(),requested.getZ(),networkBorders.get(dimension));
+                Location dest=requested.clone();dest.setX(landing.x());dest.setZ(landing.z());
                 world.getChunkAtAsync(dest,true).thenAccept(chunk->main(()->{
                     if(!p.isOnline()||sessions.get(p.getUniqueId())!=s)return;
                     try {
-                        if(!safe(dest))throw new IllegalStateException("Destination is obstructed or outside world bounds");
+                        Location resolved=safeLanding(dest);
+                        snapshot.relocate(resolved);
                         // Own frozen teleport is permitted only around this synchronous call.
                         restoring.add(p.getUniqueId());boolean moved;
-                        try{moved=p.teleport(dest,PlayerTeleportEvent.TeleportCause.PLUGIN);}finally{restoring.remove(p.getUniqueId());}
+                        try{moved=p.teleport(resolved,PlayerTeleportEvent.TeleportCause.PLUGIN);}finally{restoring.remove(p.getUniqueId());}
                         if(!moved)throw new IllegalStateException("Destination teleport was cancelled");
                         restoreProfiles(p,s,true);
                         snapshot.apply(p);
                         restoreProfiles(p,s,false);
+                        s.lastOwned=resolved.clone();s.data=snapshot.bytes();
                         s.loaded=true;checkpointInitial(p,s);
                     }catch(Exception ex){problem("Restore failed; state preserved",ex);p.kickPlayer("Destination could not be restored safely. Contact staff.");}
                 })).exceptionally(ex->{main(()->p.kickPlayer("Destination chunk could not load."));return null;});
@@ -314,11 +318,11 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private void checkpointInitial(Player p,Session s){
         Map<String,byte[]> modules;
         try{modules=captureProfiles(p);}catch(Exception ex){problem("Initial profile capture failed",ex);p.kickPlayer("Network profile capture failed.");return;}
-        s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();byte[] bytes=s.data;
-        io.execute(()->{try{persistProfiles(p.getUniqueId(),s,modules);if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){s.frozen=false;p.sendMessage("BlinkSMP network data loaded.");}});}catch(Exception ex){problem("Initial save failed",ex);main(()->p.kickPlayer("Network save failed. Your data is locked for recovery."));}});
+        s.data=PlayerSnapshot.capture(p,dimension,sourceLocation(p,s)).bytes();byte[] bytes=s.data;
+        io.execute(()->{try{persistProfiles(p.getUniqueId(),s,modules);if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){s.automaticAfter=System.currentTimeMillis()+TransferSafety.COOLDOWN_MILLIS;s.frozen=false;p.sendMessage("BlinkSMP network data loaded.");}});}catch(Exception ex){problem("Initial save failed",ex);main(()->p.kickPlayer("Network save failed. Your data is locked for recovery."));}});
     }
     private void checkpoint(Player p,Session s){
-        try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();}catch(Exception e){return;}
+        try{s.data=PlayerSnapshot.capture(p,dimension,sourceLocation(p,s)).bytes();}catch(Exception e){return;}
         byte[] bytes=s.data;Map<String,byte[]> modules;
         try{modules=captureProfiles(p);}catch(Exception ex){problem("Checkpoint profile capture failed",ex);return;}
         s.saving=true;
@@ -336,8 +340,66 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Session s=sessions.get(p.getUniqueId());
         if(s!=null&&!s.frozen&&!s.transferring) {
             if(owner==null||!ready||System.currentTimeMillis()-refreshed>15_000||!online.contains(owner)){p.sendActionBar("This region is unassigned or its server is unavailable.");return;}
-            transfer(p,s,owner,dimension,e.getTo());
+            if(s.borderQueued||!TransferSafety.automaticAllowed(System.currentTimeMillis(),s.automaticAfter,e.getFrom().getX(),e.getFrom().getZ(),e.getTo().getX(),e.getTo().getZ()))return;
+            Location from=e.getFrom().clone(),destination=e.getTo().clone();
+            // A cancelled event rewinds to getFrom(). Wait for that rewind before freezing/snapshotting.
+            s.borderQueued=true;
+            main(()->{
+                s.borderQueued=false;
+                if(!p.isOnline()||sessions.get(p.getUniqueId())!=s||s.frozen||s.transferring)return;
+                if(!owned(from)||p.getWorld()!=world||p.getLocation().distanceSquared(from)>4)return;
+                transfer(p,s,owner,dimension,destination,from);
+            });
         }
+    }
+    @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true) public void rememberPosition(PlayerMoveEvent e){
+        Session s=sessions.get(e.getPlayer().getUniqueId());
+        if(s!=null&&s.loaded&&!s.frozen&&e.getTo()!=null&&owned(e.getTo()))s.lastOwned=e.getTo().clone();
+    }
+    private Location sourceLocation(Player p,Session s){
+        Location current=p.getLocation();
+        if(owned(current))return current;
+        if(s.lastOwned!=null&&owned(s.lastOwned))return s.lastOwned.clone();
+        throw new IllegalStateException("No committed position in owned territory");
+    }
+    private Location safeLanding(Location requested){
+        // Remain inside the selected territory; never route to a neighbor while resolving a collision.
+        for(int dy:new int[]{0,1,2,-1,3,-2,4,-3,5,-4}){
+            Location candidate=requested.clone().add(0,dy,0);
+            if(owned(candidate)&&safe(candidate))return candidate;
+        }
+        throw new IllegalStateException("No unobstructed landing inside destination territory");
+    }
+    private void retreat(Player p,Session s){
+        if(s.lastOwned==null)return;
+        try {
+            Location old=s.lastOwned.clone();TransferSafety.Point inset=TransferSafety.landing(regions,id,dimension,old.getX(),old.getZ(),networkBorders.get(dimension));
+            Location dest=old.clone();dest.setX(inset.x());dest.setZ(inset.z());
+            if(!dest.getWorld().isChunkLoaded(dest.getBlockX()>>4,dest.getBlockZ()>>4))dest=old;
+            if(!safe(dest))dest=old;
+            if(!owned(dest)||!safe(dest))return;
+            restoring.add(p.getUniqueId());try{if(p.teleport(dest,PlayerTeleportEvent.TeleportCause.PLUGIN))s.lastOwned=dest.clone();}finally{restoring.remove(p.getUniqueId());}
+        }catch(Exception ex){problem("Could not retreat from failed border transfer",ex);}
+    }
+    private void rescue(CommandSender sender,String[] args){
+        if(!ready||args.length!=5){sender.sendMessage("Usage: blinknet rescue <UUID> <x> <y> <z> (player must be offline)");return;}
+        try {
+            UUID player=UUID.fromString(args[1]);
+            Location requested=new Location(world,Double.parseDouble(args[2]),Double.parseDouble(args[3]),Double.parseDouble(args[4]));
+            if(!Double.isFinite(requested.getY()))throw new IllegalArgumentException("Non-finite height");
+            TransferSafety.Point inset=TransferSafety.landing(regions,id,dimension,requested.getX(),requested.getZ(),networkBorders.get(dimension));
+            requested.setX(inset.x());requested.setZ(inset.z());
+            if(requested.getY()<world.getMinHeight()||requested.getY()>=world.getMaxHeight()-1)throw new IllegalArgumentException("Outside world height");
+            world.getChunkAtAsync(requested,false).thenAccept(chunk->main(()->{
+                if(chunk==null){sender.sendMessage("Rescue rejected: choose an already generated safe location.");return;}
+                try {
+                    Location verified=safeLanding(requested);
+                    if(Bukkit.getPlayer(player)!=null){sender.sendMessage("Rescue rejected: player is still online.");return;}
+                    io.execute(()->{try{db.rescueOffline(player,id,verified.getX(),verified.getY(),verified.getZ());main(()->sender.sendMessage("Rescued "+player+" to "+id+" at "+verified.getX()+", "+verified.getY()+", "+verified.getZ()+". Inventory and profiles preserved."));}
+                        catch(Exception ex){problem("Offline rescue rejected",ex);main(()->sender.sendMessage("Rescue rejected. Player must have an OFFLINE saved state. An active/handoff lock is never bypassed; see recovery instructions."));}});
+                }catch(Exception ex){sender.sendMessage("Rescue rejected: no clear landing in this server's territory.");}
+            })).exceptionally(ex->{main(()->sender.sendMessage("Rescue rejected: destination chunk could not load."));return null;});
+        }catch(Exception ex){sender.sendMessage("Rescue rejected: use a UUID and finite coordinates in this server's assigned territory.");}
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true) public void portal(PlayerPortalEvent e){if(dimensionPluginHandles(e))return;teleport(e);}
     /** API marker required by BlinkDimensions to prevent old-version double transfers. */
@@ -357,12 +419,18 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         else e.getPlayer().sendMessage("That destination has no available network server.");
     }
     private void transfer(Player p,Session s,String target,String destDimension,Location dest){
+        transfer(p,s,target,destDimension,dest,null);
+    }
+    private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom){
         if(s==null||s.frozen||s.transferring||s.saving||s.profileRefreshing||p.isDead()||p.isInsideVehicle()||!p.getPassengers().isEmpty()||p.isSleeping())return;
         if(p.getOpenInventory().getTopInventory().getType()!=InventoryType.CRAFTING){p.sendActionBar("Close your inventory before crossing.");return;}
         if(!p.getItemOnCursor().isEmpty()||Arrays.stream(p.getOpenInventory().getTopInventory().getContents()).anyMatch(item->item!=null&&!item.isEmpty())){p.sendActionBar("Empty your cursor and crafting grid before crossing.");return;}
         try {
             s.frozen=true;s.freezeAt=System.currentTimeMillis();s.transferring=true;s.ticket=UUID.randomUUID();s.transferTarget=target;
-            byte[] source=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();
+            Location rollback=committedFrom==null?sourceLocation(p,s):committedFrom.clone();
+            if(!owned(rollback))throw new IllegalStateException("Rollback position is not owned by this server");
+            s.lastOwned=rollback.clone();
+            byte[] source=PlayerSnapshot.capture(p,dimension,rollback).bytes();
             byte[] destination=PlayerSnapshot.capture(p,destDimension,dest).bytes();s.data=source;
             Map<String,byte[]> modules=captureProfiles(p);
             UUID ticket=s.ticket;
@@ -403,7 +471,10 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 }
                 boolean owns=released;
                 main(()->{if(!ticket.equals(s.ticket))return;s.ticket=null;s.transferring=false;s.transferTarget=null;
-                    if(p.isOnline()&&sessions.get(p.getUniqueId())==s){if(owns){s.frozen=false;p.sendMessage("Transfer did not complete; you remain on this server.");}else p.kickPlayer("Transfer could not be verified. Please reconnect.");}
+                    if(p.isOnline()&&sessions.get(p.getUniqueId())==s){if(owns){
+                        retreat(p,s);s.automaticAfter=System.currentTimeMillis()+TransferSafety.COOLDOWN_MILLIS;
+                        s.frozen=false;p.sendMessage("Transfer did not complete; you remain on this server.");
+                    }else p.kickPlayer("Transfer could not be verified. Please reconnect.");}
                     else if(owns)io.execute(()->{try{db.save(p.getUniqueId(),s.token,s.data,true);}catch(Exception ex){problem("Disconnected handoff cleanup retained lock",ex);}});
                 });
             }catch(Exception ex){problem("Transfer rollback uncertain; lock retained",ex);main(()->p.kickPlayer("Transfer could not be verified. Contact staff."));}
@@ -412,7 +483,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.MONITOR) public void death(PlayerDeathEvent e){
         if(!active)return;Player p=e.getEntity();Session s=sessions.get(p.getUniqueId());if(s==null||!s.loaded||s.transferring)return;
         main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s&&!s.frozen){
-            try{PlayerSnapshot snapshot=PlayerSnapshot.capture(p,dimension,p.getLocation());
+            try{PlayerSnapshot snapshot=PlayerSnapshot.capture(p,dimension,sourceLocation(p,s));
                 if(!e.getKeepLevel()){snapshot.yaml.set("level",e.getNewLevel());snapshot.yaml.set("exp",0.0);snapshot.yaml.set("total-exp",e.getNewTotalExp());}
                 s.data=snapshot.bytes();byte[] bytes=s.data;
                 io.execute(()->{try{if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException();}catch(Exception ex){problem("Death checkpoint failed",ex);main(()->p.kickPlayer("Network save failed. Contact staff before reconnecting."));}});
@@ -423,7 +494,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Session s=sessions.remove(e.getPlayer().getUniqueId());if(s==null)return;s.closed=true;
         if(s.transferring)return; // Destination owns the prepared snapshot. Never overwrite it on quit.
         Map<String,byte[]> modules=Map.of();
-        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,e.getPlayer().getLocation()).bytes();modules=safeDisconnectModules(s,captureProfiles(e.getPlayer()));}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
+        if(s.loaded)try{s.data=PlayerSnapshot.capture(e.getPlayer(),dimension,sourceLocation(e.getPlayer(),s)).bytes();modules=safeDisconnectModules(s,captureProfiles(e.getPlayer()));}catch(Exception ex){problem("Quit capture failed; retaining previous checkpoint",ex);}
         byte[] bytes=s.data;Map<String,byte[]> savedModules=modules;io.execute(()->{try{persistProfiles(e.getPlayer().getUniqueId(),s,savedModules);if(bytes==null)db.abandonEmpty(e.getPlayer().getUniqueId(),s.token);else db.save(e.getPlayer().getUniqueId(),s.token,bytes,true);}catch(Exception ex){problem("Quit save failed; lock retained",ex);}});
     }
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void click(InventoryClickEvent e){if(e.getWhoClicked() instanceof Player p&&blocked(p))e.setCancelled(true);}
@@ -442,9 +513,10 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void command(PlayerCommandPreprocessEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void chat(AsyncChatEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.4: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.2.5: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
+        if(args[0].equalsIgnoreCase("rescue")){rescue(sender,args);return true;}
         String[] a=args.clone();io.execute(()->{try{
             switch(a[0].toLowerCase(Locale.ROOT)){
                 case "schema"->{db.initialize();}
@@ -455,7 +527,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 case "recover"->{if(a.length!=3||!a[2].equals("ALL_PLAYER_SERVER_PROCESSES_STOPPED"))throw new IllegalArgumentException("Stop all copies of the player's server process first");db.recover(UUID.fromString(a[1]));}
                 default->throw new IllegalArgumentException("Unknown command");
             }main(()->sender.sendMessage("Operation completed. Restart after schema setup; assignments refresh within 5 seconds."));
-        }catch(Exception ex){main(()->sender.sendMessage("Operation rejected. Usage: blinknet schema | register/enable/disable <ID> | assign <Overworld|Nether|End> <regionX> <regionZ> <ID> | recover <UUID> ALL_PLAYER_SERVER_PROCESSES_STOPPED"));problem("Console operation rejected",ex);}});return true;
+        }catch(Exception ex){main(()->sender.sendMessage("Operation rejected. Usage: blinknet rescue <UUID> <x> <y> <z> | schema | register/enable/disable <ID> | assign <Overworld|Nether|End> <regionX> <regionZ> <ID> | recover <UUID> ALL_PLAYER_SERVER_PROCESSES_STOPPED"));problem("Console operation rejected",ex);}});return true;
     }
     @Override public void onDisable(){
         stopping=true;ready=false;
@@ -463,7 +535,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(db!=null)for(Player p:Bukkit.getOnlinePlayers()){
             Session s=sessions.remove(p.getUniqueId());if(s==null||s.transferring)continue;
             Map<String,byte[]> modules=Map.of();
-            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,p.getLocation()).bytes();modules=safeDisconnectModules(s,captureProfiles(p));}catch(Exception ignored){}
+            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension,sourceLocation(p,s)).bytes();modules=safeDisconnectModules(s,captureProfiles(p));}catch(Exception ignored){}
             p.kickPlayer("BlinkSMP network is shutting down. Please reconnect shortly.");
             byte[] data=s.data;Map<String,byte[]> savedModules=modules;if(data!=null)io.execute(()->{try{persistProfiles(p.getUniqueId(),s,savedModules);db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
         }
@@ -471,3 +543,4 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(db!=null)db.close();
     }
 }
+

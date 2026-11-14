@@ -219,6 +219,35 @@ public final class NetworkStore implements AutoCloseable {
         String state=release?"state='offline',owner=NULL,session=NULL":"state='active'";
         try(Connection c=pool.getConnection();PreparedStatement s=c.prepareStatement("UPDATE "+S+"players SET "+state+",payload=rollback_payload,rollback_payload=NULL,target=NULL,ticket=NULL,updated_at=now() WHERE player_id=? AND session=? AND ticket=? AND state='handoff'")){s.setObject(1,id);s.setObject(2,session);s.setObject(3,ticket);return s.executeUpdate()==1;}
     }
+    /** Offline-only position repair. Does not reset inventory, modules, sanctions or any active session. */
+    public void rescueOffline(UUID player,String server,double x,double y,double z) throws SQLException {
+        String dimension=Region.dimensionOf(server);Region region=Region.at(dimension,x,z);
+        try(Connection c=pool.getConnection()) {
+            c.setAutoCommit(false);
+            try {
+                if(!server.equals(ownerOf(c,region)))throw new SQLException("Rescue destination belongs to another server or is unassigned");
+                try(PreparedStatement q=c.prepareStatement("SELECT center_x,center_z,size_blocks,enabled,revision FROM "+S+"world_borders WHERE dimension=?")){
+                    q.setString(1,dimension);try(ResultSet r=q.executeQuery()){
+                        if(r.next()&&!new Border(dimension,r.getInt(1),r.getInt(2),r.getInt(3),r.getBoolean(4),r.getLong(5)).contains(x,z))throw new SQLException("Rescue outside world border");
+                    }
+                }
+                byte[] payload;
+                try(PreparedStatement q=c.prepareStatement("SELECT state,payload FROM "+S+"players WHERE player_id=? FOR UPDATE")){
+                    q.setObject(1,player);try(ResultSet r=q.executeQuery()){
+                        if(!r.next()||!"offline".equals(r.getString(1))||r.getBytes(2)==null)throw new SQLException("Player must be offline with a saved snapshot; active locks are not bypassed");
+                        payload=SnapshotPosition.relocate(r.getBytes(2),dimension,x,y,z);
+                    }
+                }
+                try(PreparedStatement q=c.prepareStatement("UPDATE "+S+"players SET payload=?,last_server=?,updated_at=now() WHERE player_id=? AND state='offline'")){
+                    q.setBytes(1,payload);q.setString(2,server);q.setObject(3,player);if(q.executeUpdate()!=1)throw new SQLException("Player state changed during rescue");
+                }
+                try(PreparedStatement q=c.prepareStatement("INSERT INTO "+S+"audit(action,detail) VALUES('offline-position-rescue',?)")){
+                    q.setString(1,player+" -> "+server+" "+x+","+y+","+z);q.executeUpdate();
+                }
+                c.commit();
+            }catch(SQLException|RuntimeException ex){c.rollback();throw ex;}
+        }
+    }
     /** Administrative recovery only after all copies of this player's server process have stopped. */
     public void recover(UUID id) throws SQLException {
         try(Connection c=pool.getConnection()) {
@@ -230,3 +259,4 @@ public final class NetworkStore implements AutoCloseable {
     private static void checkSize(byte[] data){if(data==null||data.length>2_097_152)throw new IllegalArgumentException("Invalid snapshot size");}
     @Override public void close(){pool.close();}
 }
+

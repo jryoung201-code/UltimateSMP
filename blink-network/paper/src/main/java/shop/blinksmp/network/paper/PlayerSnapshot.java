@@ -53,6 +53,10 @@ final class PlayerSnapshot {
     byte[] bytes(){return yaml.saveToString().getBytes(StandardCharsets.UTF_8);}
     Location location(World world){return new Location(world,yaml.getDouble("x"),yaml.getDouble("y"),yaml.getDouble("z"),(float)yaml.getDouble("yaw"),(float)yaml.getDouble("pitch"));}
     String dimension(){return yaml.getString("dimension");}
+    void relocate(Location location){
+        yaml.set("x",location.getX());yaml.set("y",location.getY());yaml.set("z",location.getZ());
+        yaml.set("yaw",location.getYaw());yaml.set("pitch",location.getPitch());
+    }
     void apply(Player p){
         p.setGameMode(GameMode.valueOf(yaml.getString("gamemode")));
         p.getInventory().setContents(InventoryLayout.adapt(inventory,p.getInventory().getSize()));p.getEnderChest().setContents(ender);p.getInventory().setHeldItemSlot(yaml.getInt("slot"));
@@ -65,3 +69,4 @@ final class PlayerSnapshot {
     }
     private static class RegionCheck {static void dimension(String d){if(!d.matches("Overworld|Nether|End"))throw new IllegalArgumentException("Invalid dimension");}}
 }
+
