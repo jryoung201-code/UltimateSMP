@@ -1,4 +1,12 @@
-# BlinkNetwork 0.4.0 — virtual queue update
+# BlinkNetwork 0.4.1 — Overworld travel fixes
+
+Fallback RTP and /leave only select Overworld points. Paper publishes only verified Overworld samples, and the database rejects a fallback relocation into Nether or End even if a stale old point exists.
+
+Use **/overworld** to return to a safe owned Overworld landing, preferring the current physical backend. Use **/blinkserver <server-ID>** to move to a safe Overworld location on that backend. Both are public by default through `blinknetwork.travel`. Normal proxy server switches to registered healthy gameplay IDs now ask the source Paper backend to prepare an inventory-safe handoff instead of misreporting maintenance. A request is HMAC-authenticated with the private exact-session token, expires, is debounced and is checked again on the source; the session token is never transmitted. Arbitrary direct connections still cannot claim an active inventory.
+
+Nether portal returns retain vanilla scaled coordinates when their target region is assigned. If the scaled Overworld exit has no owner, a portal may use a verified safe Overworld landing instead. Homes and exact-coordinate teleports do not silently change their destination: an unassigned region now reports that it is outside assigned server regions. Genuine offline/maintenance targets stay blocked. No ownership rows or world chunks are reassigned automatically.
+
+Install **BlinkNetwork-Paper 0.4.1 on BOTH world backends** and **BlinkNetwork-Velocity 0.4.1 on the proxy**, replacing older JARs. Keep BlinkQueue 1.1.0 and LimboAPI 1.2.0 unchanged. Proxy remains on Java 25; gameplay Paper remains Java 21. Existing schema 3 and credentials remain unchanged. Restart all affected processes normally; no /reload.
 
 Use **BlinkQueue 1.1.0 + LimboAPI 1.2.0** on Velocity for the restart queue. The dedicated Paper queue server is no longer needed. Follow [the current installation guide](../blink-queue/README.md). The world ownership, inventory/profile synchronization, border-loop protections and schema-3 session fencing remain in place.
 
