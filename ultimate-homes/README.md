@@ -46,8 +46,8 @@ Grant numeric permissions through your permissions provider or Bukkit attachment
 Any non-negative integer node works, not only the examples. The highest granted
 numeric node wins; false/denied nodes are ignored. The default node does not add
 to a higher limit. To allow zero new homes, deny `maxhomes.1` and any other higher
-numeric grants. `maxhomes.0` may be explicitly granted. Wildcard `maxhomes.*` and
-`maxhomes.unlimited` are not treated as numeric limits; use an explicit number.
+numeric grants, or use `/maxhomes Player set 0`. `maxhomes.0` may be explicitly granted.
+Wildcard `maxhomes.*` is ignored; the explicit `maxhomes.unlimited` permission bypasses numeric quotas.
 OP status is not an unlimited bypass. Effective permissions are consulted each
 time; no home-limit cache needs reloading when ranks change. Existing custom rank
 plugins must actually grant these nodes; a rank name alone does not grant them.

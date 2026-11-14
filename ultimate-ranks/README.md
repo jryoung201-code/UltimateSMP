@@ -61,16 +61,16 @@ command is provided.
 | Blink++ | `maxhomes.5` | 5 |
 | Blink+++ | `maxhomes.9` | 9 |
 
-Assign with `/rank set PlayerName Blink+`, `/rank set PlayerName Blink++`, or
-`/rank set PlayerName Blink+++`. Console uses the same commands without `/`.
+Add alongside existing ranks with `/rank add PlayerName Blink+`, `/rank add PlayerName Blink++`, or
+`/rank add PlayerName Blink+++`. Console uses the same commands without `/`.
 ADMIN and higher can assign these ranks to lower-ranked players. Names with
 pluses are accepted case-insensitively, appear in chat/TAB, and autocomplete.
 The stored names are `BLINK_PLUS`, `BLINK_PLUS_PLUS`, `BLINK_PLUS_PLUS_PLUS`;
 these are also the optional prefix/extra-permission config keys.
 
 These player ranks have the same moderation level as MEMBER and grant no staff
-commands, staff chat, or OP. This remains a single-rank system: assigning Blink+
-to a staff player replaces that staff rank; it is not a separate subscription slot.
+commands, staff chat, or OP. Use `/rank add` to retain staff memberships;
+`/rank set` intentionally replaces all memberships.
 
 UltimateHomes (or another plugin that reads `maxhomes.#`) must be installed to
 provide home commands. Its highest true numeric permission wins, so a higher
@@ -130,7 +130,7 @@ supported. Back this file up. Do not edit it while the server is running.
 
 Prefixes and exact-rank extra permission nodes are configured in config.yml;
 restart after editing. Staff capabilities inside this plugin are fixed by the
-rank hierarchy. Extra permissions are for other plugins and are NOT inherited.
+rank hierarchy. Extra permissions are for other plugins and combine across all assigned ranks.
 OWNER, DEV and ADMIN receive `ultimateoptimize.admin` by default. No rank receives
 OP or `*`. Vanilla OP powers and permissions granted by other plugins remain
 independent; use ranks without OP for ordinary staff.
