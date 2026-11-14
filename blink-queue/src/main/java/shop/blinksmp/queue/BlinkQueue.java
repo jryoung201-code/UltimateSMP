@@ -105,7 +105,7 @@ public final class BlinkQueue {
         if(!ready)return false;
         demandUntil.set(System.nanoTime()+TimeUnit.SECONDS.toNanos(config.waitSeconds()));probe();return true;
     }
-    private Attempt enter(Player player,boolean checkRoute){
+    private synchronized Attempt enter(Player player,boolean checkRoute){
         if(!ready||!player.isActive())return null;
         Attempt existing=attempts.get(player.getUniqueId());
         if(existing!=null){
@@ -163,10 +163,11 @@ public final class BlinkQueue {
             }
             if(a.checking)continue;
             show(a);
-            if(queueOnline&&now-checkedAt<TimeUnit.SECONDS.toNanos(config.pollSeconds()+config.pingSeconds()+1)&&a.virtual!=null){
+            LimboPlayer virtual=a.virtual;
+            if(attempts.get(a.player.getUniqueId())==a&&queueOnline&&now-checkedAt<TimeUnit.SECONDS.toNanos(config.pollSeconds()+config.pingSeconds()+1)&&virtual!=null){
                 a.departing=true;a.departedAt=now;
                 a.player.clearTitle();a.player.sendMessage(Component.text("Queue server ready. Connecting..."));
-                a.virtual.disconnect(proxy.getServer(config.queue()).orElseThrow());
+                virtual.disconnect(proxy.getServer(config.queue()).orElseThrow());
             }
         }
         long demand=demandUntil.get();
@@ -195,8 +196,8 @@ public final class BlinkQueue {
     }
     @Subscribe public void connected(ServerConnectedEvent event){Attempt a=attempts.get(event.getPlayer().getUniqueId());if(a!=null)remove(a);}
     @Subscribe public void disconnected(DisconnectEvent event){Attempt a=attempts.get(event.getPlayer().getUniqueId());if(a!=null)remove(a);}
-    private void remove(Attempt a){if(attempts.remove(a.player.getUniqueId(),a))capacity.release();}
-    private void fail(Attempt a,String message){remove(a);a.player.disconnect(Component.text(message));}
+    private boolean remove(Attempt a){if(attempts.remove(a.player.getUniqueId(),a)){capacity.release();return true;}return false;}
+    private void fail(Attempt a,String message){if(remove(a))a.player.disconnect(Component.text(message));}
     @Subscribe public void stop(ProxyShutdownEvent event){
         ready=false;if(timer!=null)timer.cancel();
         for(Attempt a:attempts.values())fail(a,"The proxy is restarting. Please reconnect shortly.");
