@@ -26,6 +26,8 @@ public final class BlinkNetworkProxy {
     private static final MinecraftChannelIdentifier CHANNEL=MinecraftChannelIdentifier.from(Protocol.CHANNEL);
     private static final String MAINTENANCE="This server is under maintenance. Please try again later.";
     private final TransferThrottle transferThrottle=new TransferThrottle();
+    private final Map<UUID,Long> switchAfter=new ConcurrentHashMap<>();
+    private static final MinecraftChannelIdentifier SWITCH=MinecraftChannelIdentifier.from(SwitchRequest.CHANNEL);
     private final Map<UUID,Waiting> waiting=new ConcurrentHashMap<>();
     private final Map<UUID,QueuePermit> permits=new ConcurrentHashMap<>();
     private final AtomicBoolean polling=new AtomicBoolean();
@@ -45,7 +47,7 @@ public final class BlinkNetworkProxy {
             if(!queueId.matches("BlinkSMP-Queue-(0[1-9]|[1-9][0-9])"))throw new IllegalArgumentException("Invalid queue ID");
             if(proxy.getServer(bootstrap).isEmpty())throw new IllegalArgumentException("Bootstrap server is not registered");
             db=new NetworkStore(env("BLINK_NETWORK_JDBC_URL",p,"jdbc-url"),env("BLINK_NETWORK_DB_USER",p,"username"),env("BLINK_NETWORK_DB_PASSWORD",p,"password"));
-            proxy.getChannelRegistrar().register(CHANNEL);
+            proxy.getChannelRegistrar().register(CHANNEL,SWITCH);
             initialize();
             proxy.getScheduler().buildTask(this,()->{
                 if(!polling.compareAndSet(false,true))return;
@@ -76,21 +78,36 @@ public final class BlinkNetworkProxy {
                     target=route==null?bootstrap:db.loginTarget(player.getUniqueId(),route);
                 }else {
                     target=requested;
-                    if(route==null||!route.permits(from.get().getServerInfo().getName(),target))throw new IllegalStateException("No prepared transfer");
+                    if(route==null||!route.permits(from.get().getServerInfo().getName(),target)){
+                        event.setResult(ServerPreConnectEvent.ServerResult.denied());
+                        String source=from.get().getServerInfo().getName();
+                        if(route!=null&&route.state().equals("active")&&source.equals(route.owner())&&proxy.getServer(target).isPresent()&&db.ready(target)){
+                            try{Region.dimensionOf(target);}catch(IllegalArgumentException ex){player.sendMessage(Component.text("That server is not a gameplay destination."));return;}
+                            long now=System.currentTimeMillis();Long previous=switchAfter.putIfAbsent(player.getUniqueId(),now+3000);
+                            if(previous!=null&&(previous>now||!switchAfter.replace(player.getUniqueId(),previous,now+3000))){player.sendMessage(Component.text("Please wait a moment before switching again."));return;}
+                            UUID token=db.switchKey(player.getUniqueId(),source);
+                            byte[] request=new SwitchRequest(player.getUniqueId(),UUID.randomUUID(),target,now+60_000).bytes(token);
+                            if(!from.get().sendPluginMessage(SWITCH,request))player.sendMessage(Component.text("The source server could not receive the travel request."));
+                            else player.sendMessage(Component.text("Preparing a saved transfer to "+target+"..."));
+                            return;
+                        }
+                        throw new IllegalStateException("No active source session or world unavailable");
+                    }
                 }
                 var server=proxy.getServer(target);
                 if(server.isEmpty()||!db.ready(target))throw new IllegalStateException("World is unavailable");
                 event.setResult(ServerPreConnectEvent.ServerResult.allowed(server.get()));
             }catch(Exception ex){
                 event.setResult(ServerPreConnectEvent.ServerResult.denied());player.sendMessage(Component.text(MAINTENANCE));
-                log.warn("Network route rejected ({}); inventory remains fenced.",ex.getClass().getSimpleName());
+                log.warn("Network route rejected ({}); inventory remains fenced. Requested server must match its prepared session/queue admission.",ex.getClass().getSimpleName());
                 if(player.getCurrentServer().isEmpty()&&!queueBridge("isHeld",player))player.disconnect(Component.text("Network data is unavailable. Please try later."));
             }
         });
     }
     @Subscribe public void connected(ServerConnectedEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());}
-    @Subscribe public void disconnected(DisconnectEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());}
+    @Subscribe public void disconnected(DisconnectEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());switchAfter.remove(event.getPlayer().getUniqueId());}
     @Subscribe public void message(PluginMessageEvent event){
+        if(event.getIdentifier().equals(SWITCH)){event.setResult(PluginMessageEvent.ForwardResult.handled());return;}
         if(!event.getIdentifier().equals(CHANNEL))return;
         event.setResult(PluginMessageEvent.ForwardResult.handled());
         if(!ready||!(event.getSource() instanceof ServerConnection source)||!(event.getTarget() instanceof Player player))return;

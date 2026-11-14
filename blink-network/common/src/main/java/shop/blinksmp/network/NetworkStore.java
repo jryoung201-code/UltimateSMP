@@ -290,6 +290,12 @@ public final class NetworkStore implements AutoCloseable {
             c.commit();return true;
         }
     }
+    /** Private session authentication for a safe proxy-requested server switch. */
+    public UUID switchKey(UUID player,String source)throws SQLException{
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT session FROM "+S+"players WHERE player_id=? AND state='active' AND owner=?")){
+            q.setObject(1,player);q.setString(2,source);try(ResultSet row=q.executeQuery()){if(!row.next())throw new SQLException("No active source session");return (UUID)row.getObject(1);}
+        }
+    }
     public boolean queued(UUID player,String origin,UUID ticket) throws SQLException {
         try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT 1 FROM "+S+"queue_requests WHERE player_id=? AND origin=? AND ticket=? AND created_at>now()-interval '2 minutes'")){
             q.setObject(1,player);q.setString(2,origin);q.setObject(3,ticket);try(ResultSet r=q.executeQuery()){return r.next();}
@@ -316,12 +322,13 @@ public final class NetworkStore implements AutoCloseable {
         try(Connection c=pool.getConnection();Statement q=c.createStatement();ResultSet r=q.executeQuery("SELECT 1 FROM "+S+"servers WHERE maintenance LIMIT 1")){return r.next();}
     }
     public boolean rerouteOffline(UUID player,Rtp point) throws SQLException {
+        if(!point.dimension().equals("Overworld"))throw new IllegalArgumentException("Fallback RTP must use Overworld");
         if(!ready(point.server()))return false;
         rescueOffline(player,point.server(),point.dimension(),point.x(),point.y(),point.z(),true);return true;
     }
     public List<Rtp> rtpPoints(String exclude) throws SQLException {
         List<Rtp> result=new ArrayList<>();Map<Region,String> owners=assignments();Map<String,Border> limits=borders();
-        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT p.server_id,p.dimension,x,y,z FROM "+S+"rtp_points p JOIN "+S+"servers s ON s.id=p.server_id WHERE s.enabled AND NOT s.maintenance AND s.heartbeat>now()-interval '15 seconds' AND p.heartbeat>now()-interval '45 seconds' AND s.id<>?")){
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT p.server_id,p.dimension,x,y,z FROM "+S+"rtp_points p JOIN "+S+"servers s ON s.id=p.server_id WHERE s.enabled AND NOT s.maintenance AND s.heartbeat>now()-interval '15 seconds' AND p.heartbeat>now()-interval '45 seconds' AND p.dimension='Overworld' AND s.id<>?")){
             q.setString(1,exclude);try(ResultSet r=q.executeQuery()){while(r.next()){
                 Rtp p=new Rtp(r.getString(1),r.getString(2),r.getDouble(3),r.getDouble(4),r.getDouble(5));Border b=limits.get(p.dimension());
                 if(p.server().equals(owners.get(Region.at(p.dimension(),p.x(),p.z())))&&(b==null||b.contains(p.x(),p.z())))result.add(p);

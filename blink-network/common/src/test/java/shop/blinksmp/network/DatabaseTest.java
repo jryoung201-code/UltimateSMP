@@ -209,5 +209,19 @@ class DatabaseTest {
         assertArrayEquals(bytes,db.claim(p,server,UUID.randomUUID(),false));assertTrue(db.heartbeat(server,fresh));
     }
 
+    @Test void fallbackRtpCannotSelectOrApplyNetherOrEndEvenWithStalePoints()throws Exception{
+        db.dimensions(B,true);db.assign(new Region("Overworld",1,0),B);
+        for(String dimension:List.of("Overworld","Nether","End"))db.publishRtp(new NetworkStore.Rtp(B,dimension,164,72,20));
+        var points=db.rtpPoints(A);assertEquals(1,points.size());assertEquals("Overworld",points.getFirst().dimension());
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);byte[] bytes=position(12,12);db.save(p,session,bytes,true);
+        for(String dimension:List.of("Nether","End"))assertThrows(IllegalArgumentException.class,()->db.rerouteOffline(p,new NetworkStore.Rtp(B,dimension,164,72,20)));
+        assertTrue(db.rerouteOffline(p,points.getFirst()));String after=new String(db.claim(p,B,UUID.randomUUID(),false),java.nio.charset.StandardCharsets.UTF_8);assertTrue(after.contains("dimension: Overworld"));assertTrue(after.contains("inventory: PRESERVE_ITEM_NBT"));
+    }
+    @Test void serverSwitchSigningKeyRequiresExactActiveSourceSession()throws Exception{
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);db.save(p,session,new byte[]{1},false);
+        assertEquals(session,db.switchKey(p,A));assertThrows(SQLException.class,()->db.switchKey(p,B));
+        assertTrue(db.prepare(p,session,B,UUID.randomUUID(),new byte[]{1},new byte[]{2}));assertThrows(SQLException.class,()->db.switchKey(p,A));
+    }
+
 }
 

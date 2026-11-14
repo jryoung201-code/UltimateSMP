@@ -37,10 +37,10 @@ jobs:
       - if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
-          name: BlinkNetwork-0.4.0
+          name: BlinkNetwork-0.4.1
           path: |
-            blink-network/paper/target/BlinkNetwork-Paper-0.4.0.jar
-            blink-network/velocity/target/BlinkNetwork-Velocity-0.4.0.jar
+            blink-network/paper/target/BlinkNetwork-Paper-0.4.1.jar
+            blink-network/velocity/target/BlinkNetwork-Velocity-0.4.1.jar
             blink-network/README.md
             blink-network/WEBSITE-INTEGRATION.md
             blink-network/common/src/main/resources/schema.sql

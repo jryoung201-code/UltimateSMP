@@ -1,14 +1,23 @@
 name: BlinkNetwork
-version: 0.4.0
+version: 0.4.1
 main: shop.blinksmp.network.paper.BlinkNetwork
 api-version: '1.21.11'
 author: RealJR_25736
 description: Region routing, fenced handoffs and player profile synchronization for BlinkSMP
 commands:
+  overworld:
+    description: Return to a verified safe Overworld landing.
+    permission: blinknetwork.travel
+  blinkserver:
+    description: Save inventory and travel to another world server.
+    permission: blinknetwork.travel
   blinknet:
     description: Network status and console-only setup
     permission: blinknetwork.admin
 permissions:
+  blinknetwork.travel:
+    description: Allows public network world travel.
+    default: true
   blinknetwork.admin:
     default: op
 
