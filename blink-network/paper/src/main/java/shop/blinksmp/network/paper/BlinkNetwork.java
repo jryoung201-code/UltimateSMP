@@ -192,9 +192,9 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 arrival.getChunkAtAsync(dest,true).thenAccept(chunk->main(()->{
                     if(!p.isOnline()||sessions.get(p.getUniqueId())!=s)return;
                     try {
-                        Location resolved=safeLanding(dest);
+                        Location resolved=snapshot.yaml.getBoolean("portal-arrival",false)?safePortalLanding(dest):safeLanding(dest);
                         if(snapshot.yaml.getBoolean("rtp-arrival",false)&&!safeFloor(resolved))throw new IllegalStateException("RTP landing changed; retry from queue");
-                        snapshot.yaml.set("rtp-arrival",null);
+                        snapshot.yaml.set("rtp-arrival",null);snapshot.yaml.set("portal-arrival",null);
                         snapshot.relocate(resolved);
                         // Own frozen teleport is permitted only around this synchronous call.
                         restoring.add(p.getUniqueId());boolean moved;
@@ -394,6 +394,19 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         }
         throw new IllegalStateException("No unobstructed landing inside destination territory");
     }
+    private Location safePortalLanding(Location requested){
+        // No pads overwrite builds: find a floor in already-loaded nearby territory or reject safely.
+        for(int radius=0;radius<=8;radius+=2)for(int dx=-radius;dx<=radius;dx+=2)for(int dz=-radius;dz<=radius;dz+=2){
+            if(radius>0&&Math.max(Math.abs(dx),Math.abs(dz))!=radius)continue;
+            Location base=requested.clone().add(dx,0,dz);
+            if(!base.getWorld().isChunkLoaded(base.getBlockX()>>4,base.getBlockZ()>>4))continue;
+            for(int offset=0;offset<=96;offset++)for(int sign:new int[]{1,-1}){
+                Location test=base.clone().add(0,offset*sign,0);
+                if(safeFloor(test))return test;
+            }
+        }
+        throw new IllegalStateException("No safe portal floor in owned loaded terrain");
+    }
     private void retreat(Player p,Session s){
         if(s.lastOwned==null)return;
         try {
@@ -439,13 +452,14 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         String owner=regions.get(Region.at(destDimension,to.getX(),to.getZ()));
         if(id.equals(owner)&&worlds.containsValue(to.getWorld())&&!maintenance)return;
         e.setCancelled(true);
-        if(!maintenance&&owner!=null&&online.contains(owner)&&ready&&System.currentTimeMillis()-refreshed<=15_000)transfer(e.getPlayer(),sessions.get(e.getPlayer().getUniqueId()),owner,destDimension,to);
+        if(!maintenance&&owner!=null&&online.contains(owner)&&ready&&System.currentTimeMillis()-refreshed<=15_000)transfer(e.getPlayer(),sessions.get(e.getPlayer().getUniqueId()),owner,destDimension,to,null,e instanceof PlayerPortalEvent);
         else e.getPlayer().sendMessage(MAINTENANCE);
     }
     private void transfer(Player p,Session s,String target,String destDimension,Location dest){
         transfer(p,s,target,destDimension,dest,null);
     }
-    private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom){
+    private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom){transfer(p,s,target,destDimension,dest,committedFrom,false);}
+    private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom,boolean portal){
         if(maintenance){p.sendMessage(MAINTENANCE);return;}
         if(s==null||s.frozen||s.transferring||s.saving||s.profileRefreshing||p.isDead()||p.isInsideVehicle()||!p.getPassengers().isEmpty()||p.isSleeping())return;
         if(p.getOpenInventory().getTopInventory().getType()!=InventoryType.CRAFTING){p.sendActionBar("Close your inventory before crossing.");return;}
@@ -456,7 +470,8 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             if(!owned(rollback))throw new IllegalStateException("Rollback position is not owned by this server");
             s.lastOwned=rollback.clone();
             byte[] source=PlayerSnapshot.capture(p,dimension(rollback.getWorld()),rollback).bytes();
-            byte[] destination=PlayerSnapshot.capture(p,destDimension,dest).bytes();s.data=source;
+            PlayerSnapshot arriving=PlayerSnapshot.capture(p,destDimension,dest);if(portal)arriving.yaml.set("portal-arrival",true);
+            byte[] destination=arriving.bytes();s.data=source;
             Map<String,byte[]> modules=captureProfiles(p);
             UUID ticket=s.ticket;
             io.execute(()->{

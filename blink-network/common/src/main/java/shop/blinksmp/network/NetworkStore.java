@@ -309,7 +309,7 @@ public final class NetworkStore implements AutoCloseable {
     }
     public boolean rtpPending(UUID player) throws SQLException {
         try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT payload FROM "+S+"players WHERE player_id=? AND state='offline'")){
-            q.setObject(1,player);try(ResultSet r=q.executeQuery()){return r.next()&&r.getBytes(1)!=null&&new String(r.getBytes(1),StandardCharsets.UTF_8).contains("\nrtp-arrival: true");}
+            q.setObject(1,player);try(ResultSet r=q.executeQuery()){return r.next()&&r.getBytes(1)!=null&&new String(r.getBytes(1),StandardCharsets.UTF_8).matches("(?s).*(?:\nrtp-arrival: true|\nportal-arrival: true).*" );}
         }
     }
     public boolean anyMaintenance() throws SQLException {

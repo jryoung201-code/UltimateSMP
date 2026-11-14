@@ -175,6 +175,7 @@ public final class BlinkNetworkProxy {
     private void startQueue(){
         // Optional operator-owned HTTPS webhook. No panel URLs or credentials are guessed.
         if(startUrl.isBlank()||System.currentTimeMillis()-lastStart<60_000)return;
+        try{if(db.queueReady(queueServer))return;}catch(java.sql.SQLException ex){return;}
         lastStart=System.currentTimeMillis();
         var builder=HttpRequest.newBuilder(URI.create(startUrl)).timeout(Duration.ofSeconds(10)).POST(HttpRequest.BodyPublishers.noBody());
         String token=System.getenv("BLINK_QUEUE_START_TOKEN");if(token!=null&&!token.isBlank())builder.header("Authorization","Bearer "+token);
@@ -188,13 +189,17 @@ public final class BlinkNetworkProxy {
             try {
                 String origin=event.getServer().getServerInfo().getName();Region.dimensionOf(origin);
                 // Network failure only. A supplied moderation/login rejection is never converted into a bypass.
-                if(!event.kickedDuringServerConnect()&&event.getServerKickReason().isEmpty()&&!db.ready(origin)){
+                if(!event.kickedDuringServerConnect()&&isNetworkFailure(event.getServerKickReason())){
                     waiting.put(event.getPlayer().getUniqueId(),new Waiting(origin,true));startQueue();queuePermits.put(event.getPlayer().getUniqueId(),origin);
                     var queue=proxy.getServer(queueServer);if(queue.isPresent()){event.setResult(KickedFromServerEvent.RedirectPlayer.create(queue.get()));return;}
                 }
             }catch(Exception ignored){}
             preventKickRedirect(event);
         });
+    }
+    static boolean isNetworkFailure(Optional<Component> reason){
+        return reason.isEmpty()||(reason.get() instanceof net.kyori.adventure.text.TranslatableComponent translated
+            && translated.key().equals("velocity.error.internal-server-connection-error"));
     }
     static void preventKickRedirect(KickedFromServerEvent event){
         try{Region.dimensionOf(event.getServer().getServerInfo().getName());}catch(IllegalArgumentException ignored){return;}
