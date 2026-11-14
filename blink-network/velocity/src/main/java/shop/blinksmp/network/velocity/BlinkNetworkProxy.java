@@ -73,7 +73,7 @@ public final class BlinkNetworkProxy {
                 if(requested.equals(queueServer)&&queuePermits.remove(player.getUniqueId())!=null){event.setResult(ServerPreConnectEvent.ServerResult.allowed(proxy.getServer(queueServer).orElseThrow()));return;}
                 if(from.isEmpty()){
                     target=route==null?bootstrap:db.loginTarget(player.getUniqueId(),route);
-                    if(waiting.containsKey(player.getUniqueId())||!db.ready(target)){
+                    if(waiting.containsKey(player.getUniqueId())||!db.ready(target)||db.rtpPending(player.getUniqueId())){
                         waiting.putIfAbsent(player.getUniqueId(),new Waiting(target,true));startQueue();
                         event.setResult(ServerPreConnectEvent.ServerResult.allowed(proxy.getServer(queueServer).orElseThrow()));return;
                     }

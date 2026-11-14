@@ -85,3 +85,5 @@ UPDATE blinksmp_network_v1.meta SET version=3 WHERE id=1 AND version=2;
 CREATE TABLE IF NOT EXISTS blinksmp_network_v1.queue_status (
  id text PRIMARY KEY, heartbeat timestamptz NOT NULL DEFAULT now(), ready boolean NOT NULL DEFAULT false
 );
+
+ALTER TABLE blinksmp_network_v1.players ADD COLUMN IF NOT EXISTS owner_instance uuid;

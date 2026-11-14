@@ -203,7 +203,7 @@ public final class NetworkStore implements AutoCloseable {
                     if(!allowed)throw new SQLException("Player state is held by another session/server or saved region is unassigned");
                 }
             }
-            try(PreparedStatement s=c.prepareStatement("UPDATE "+S+"players SET state='active',owner=?,last_server=?,session=?,target=NULL,ticket=NULL,rollback_payload=NULL,updated_at=now() WHERE player_id=?")){s.setString(1,server);s.setString(2,server);s.setObject(3,session);s.setObject(4,id);s.executeUpdate();}
+            try(PreparedStatement s=c.prepareStatement("UPDATE "+S+"players SET state='active',owner=?,last_server=?,session=?,owner_instance=(SELECT instance FROM "+S+"servers WHERE id=?),target=NULL,ticket=NULL,rollback_payload=NULL,updated_at=now() WHERE player_id=?")){s.setString(1,server);s.setString(2,server);s.setObject(3,session);s.setString(4,server);s.setObject(5,id);s.executeUpdate();}
             c.commit();return data;
         }
     }
@@ -307,6 +307,11 @@ public final class NetworkStore implements AutoCloseable {
     public boolean queueReady(String id) throws SQLException {
         try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT 1 FROM "+S+"queue_status WHERE id=? AND ready AND heartbeat>now()-interval '15 seconds'")){q.setString(1,id);try(ResultSet r=q.executeQuery()){return r.next();}}
     }
+    public boolean rtpPending(UUID player) throws SQLException {
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT payload FROM "+S+"players WHERE player_id=? AND state='offline'")){
+            q.setObject(1,player);try(ResultSet r=q.executeQuery()){return r.next()&&r.getBytes(1)!=null&&new String(r.getBytes(1),StandardCharsets.UTF_8).contains("\nrtp-arrival: true");}
+        }
+    }
     public boolean anyMaintenance() throws SQLException {
         try(Connection c=pool.getConnection();Statement q=c.createStatement();ResultSet r=q.executeQuery("SELECT 1 FROM "+S+"servers WHERE maintenance LIMIT 1")){return r.next();}
     }
@@ -316,7 +321,7 @@ public final class NetworkStore implements AutoCloseable {
     }
     public List<Rtp> rtpPoints(String exclude) throws SQLException {
         List<Rtp> result=new ArrayList<>();Map<Region,String> owners=assignments();Map<String,Border> limits=borders();
-        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT p.server_id,p.dimension,x,y,z FROM "+S+"rtp_points p JOIN "+S+"servers s ON s.id=p.server_id WHERE s.enabled AND NOT s.maintenance AND s.heartbeat>now()-interval '15 seconds' AND p.heartbeat>now()-interval '15 seconds' AND s.id<>?")){
+        try(Connection c=pool.getConnection();PreparedStatement q=c.prepareStatement("SELECT p.server_id,p.dimension,x,y,z FROM "+S+"rtp_points p JOIN "+S+"servers s ON s.id=p.server_id WHERE s.enabled AND NOT s.maintenance AND s.heartbeat>now()-interval '15 seconds' AND p.heartbeat>now()-interval '45 seconds' AND s.id<>?")){
             q.setString(1,exclude);try(ResultSet r=q.executeQuery()){while(r.next()){
                 Rtp p=new Rtp(r.getString(1),r.getString(2),r.getDouble(3),r.getDouble(4),r.getDouble(5));Border b=limits.get(p.dimension());
                 if(p.server().equals(owners.get(Region.at(p.dimension(),p.x(),p.z())))&&(b==null||b.contains(p.x(),p.z())))result.add(p);
@@ -329,17 +334,19 @@ public final class NetworkStore implements AutoCloseable {
         try(Connection c=pool.getConnection()) {
             c.setAutoCommit(false);
             try {
-                String owner,state;
-                try(PreparedStatement q=c.prepareStatement("SELECT state,owner FROM "+S+"players WHERE player_id=? FOR UPDATE")){
-                    q.setObject(1,player);try(ResultSet r=q.executeQuery()){if(!r.next()){c.rollback();return false;}state=r.getString(1);owner=r.getString(2);}
+                String owner,state;UUID held;
+                try(PreparedStatement q=c.prepareStatement("SELECT state,owner,owner_instance FROM "+S+"players WHERE player_id=? FOR UPDATE")){
+                    q.setObject(1,player);try(ResultSet r=q.executeQuery()){if(!r.next()){c.rollback();return false;}state=r.getString(1);owner=r.getString(2);held=(UUID)r.getObject(3);}
                 }
                 if(state.equals("offline")){c.commit();return true;}
-                UUID old;
-                try(PreparedStatement q=c.prepareStatement("SELECT instance FROM "+S+"servers WHERE id=? AND (heartbeat IS NULL OR heartbeat<now()-interval '45 seconds') FOR UPDATE")){
-                    q.setString(1,owner);try(ResultSet r=q.executeQuery()){if(!r.next()){c.rollback();return false;}old=(UUID)r.getObject(1);}
+                UUID current;boolean expired;
+                try(PreparedStatement q=c.prepareStatement("SELECT instance,(heartbeat IS NULL OR heartbeat<now()-interval '45 seconds') FROM "+S+"servers WHERE id=? FOR UPDATE")){
+                    q.setString(1,owner);try(ResultSet r=q.executeQuery()){if(!r.next()){c.rollback();return false;}current=(UUID)r.getObject(1);expired=r.getBoolean(2);}
                 }
+                if((held==null||Objects.equals(held,current))&&!expired){c.rollback();return false;}
+                UUID old=held==null?current:held;
                 if(old!=null)try(PreparedStatement q=c.prepareStatement("INSERT INTO "+S+"retired_instances(server_id,instance) VALUES(?,?) ON CONFLICT DO NOTHING")){q.setString(1,owner);q.setObject(2,old);q.executeUpdate();}
-                try(PreparedStatement q=c.prepareStatement("UPDATE "+S+"servers SET instance=NULL,heartbeat=NULL WHERE id=?")){q.setString(1,owner);q.executeUpdate();}
+                if(Objects.equals(old,current))try(PreparedStatement q=c.prepareStatement("UPDATE "+S+"servers SET instance=NULL,heartbeat=NULL WHERE id=?")){q.setString(1,owner);q.executeUpdate();}
                 try(PreparedStatement q=c.prepareStatement("UPDATE "+S+"players SET payload=CASE WHEN state='handoff' THEN rollback_payload ELSE payload END,state='offline',owner=NULL,session=NULL,target=NULL,ticket=NULL,rollback_payload=NULL,updated_at=now() WHERE player_id=?")){q.setObject(1,player);q.executeUpdate();}
                 try(PreparedStatement q=c.prepareStatement("INSERT INTO "+S+"audit(action,detail) VALUES('dead-instance-fenced',?)")){q.setString(1,player+" owner="+owner);q.executeUpdate();}
                 c.commit();return true;

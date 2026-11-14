@@ -163,6 +163,7 @@ class DatabaseTest {
         db.maintenance(B,false);assertTrue(db.ready(B));
     }
     @Test void restartQueueReleasesOnlyExactSessionAndPreservesInventory()throws Exception{
+        db.assign(new Region("Overworld",0,0),A);
         UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);
         byte[] snapshot=position(12,12);db.save(p,session,snapshot,false);
         assertFalse(db.queue(p,UUID.randomUUID(),A,ticket,snapshot));assertEquals("active",db.route(p).state());
@@ -188,6 +189,14 @@ class DatabaseTest {
         String after=new String(db.claim(p,B,UUID.randomUUID(),false),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(after.contains("inventory: PRESERVE_ITEM_NBT"));assertTrue(after.contains("rtp-arrival: true"));
         db.maintenance(B,true);assertTrue(db.rtpPoints(A).isEmpty());
+    }
+
+    @Test void restartedProcessCanRecoverOrphanWithoutFencingItsNewInstance()throws Exception{
+        String server="BlinkSMP-End-97";UUID old=UUID.randomUUID(),fresh=UUID.randomUUID(),p=UUID.randomUUID(),session=UUID.randomUUID();
+        db.register(server);db.enable(server,true);db.heartbeat(server,old);db.claim(p,server,session,true);db.save(p,session,position(12,12),false);
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres");Statement q=c.createStatement()){q.execute("UPDATE blinksmp_network_v1.servers SET heartbeat=now()-interval '46 seconds' WHERE id='"+server+"'");}
+        assertTrue(db.heartbeat(server,fresh));assertTrue(db.releaseDeadSession(p));
+        assertFalse(db.heartbeat(server,old));assertTrue(db.heartbeat(server,fresh));assertTrue(db.ready(server));
     }
 
 }

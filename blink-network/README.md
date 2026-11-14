@@ -1,136 +1,82 @@
-# BlinkNetwork 0.2.5 — particle borders and safer transfers
+# BlinkNetwork 0.3.0 — Paper 1.21.11 / Velocity / Java 21
 
-Paper 1.21.11 / Java 21 region-border transfers with Velocity 3.4+, a shared Neon PostgreSQL database, and persistent fenced sessions. This is a first network-layer release: live Java/Bedrock and fault testing is required before migrating the public server.
+Each gameplay backend can own the same 9×9 Minecraft-chunk regions (144×144 blocks) in the Overworld, Nether and End. Nether coordinates still follow vanilla portal scaling; region ownership uses actual coordinates in each dimension. Matching region X/Z means the same numeric region, not an eight-times-larger mirrored area.
 
-## New in 0.2.5: border-loop fix
+## Upgrade from 0.2.x
 
-- Region-edge handoffs are queued for the next tick, after cancelled movement has returned to `getFrom()`. Rollback uses that confirmed source coordinate, not the uncommitted crossing coordinate.
-- Arrivals and restored logins are inset two blocks from foreign/unassigned edges and world borders, with nearby vertical collision checks inside the same owned territory. Same-owner internal edges are unchanged.
-- A three-second automatic cooldown follows arrival and rollback. Camera turns cannot start handoffs. Velocity throttles rapid UUID/ticket requests across reconnects and stops fallback redirects from turning rejected backend logins into loops.
-- Checkpoint and disconnect snapshots use an owned current position or the last committed owned position. Inventory and enabled profile modules remain intact.
-- New console-only `blinknet rescue <UUID> <x> <y> <z>` repairs an OFFLINE player's saved coordinates on this backend. It checks terrain and territory, changes only location/last-server, and writes an audit entry. It never unlocks active/pending sessions or resets inventory/ranks.
-- Includes 0.2.4 BlinkDimensions portal delegation compatibility. Existing schema v2, server IDs, assignments and profile choices are unchanged. No additional schema migration is needed for this patch.
+1. Back up Neon and every world. Stop Velocity and all gameplay backends before migration. Do not mix 0.2.x and 0.3.0 binaries.
+2. Apply `common/src/main/resources/schema.sql` with the direct Neon connection and migration role. Schema version becomes 3; schema name remains `blinksmp_network_v1`. Existing inventories, profiles and explicit dimension assignments are retained. No world chunks are moved.
+3. Replace the Paper JAR on every gameplay backend and the Velocity JAR on the proxy. Remove old duplicate JARs. Remove/disable the separate BlinkDimensions plugin: dimension routing is now built into BlinkNetwork, and its previous bridge deliberately rejects this build to prevent double transfers.
+4. On both gameplay backends, configure the same three local world names, enable Nether in `server.properties` and End in `bukkit.yml`. Copy the original dimension world data deliberately; the same seed alone does not copy player builds. Existing `world:` remains the primary world matching the ID.
+5. Start Paper backends first, then Velocity. Each backend advertises its all-dimension capability only after configuration succeeds. `blinknet status` must report ready. Player bootstrap/import and opt-in profile sync settings remain unchanged.
 
-### Recover an already stuck player
+```yaml
+enabled: true
+role: world
+server-id: BlinkSMP-Overworld-01  # second backend: BlinkSMP-Overworld-02
+world: world
+all-dimensions: true
+worlds:
+  Overworld: world
+  Nether: world_nether
+  End: world_the_end
+queue-server: BlinkSMP-Queue-01
+bootstrap-server: BlinkSMP-Overworld-01
+proxy-security-configured: true
+```
 
-1. Back up Neon/player data. Stop V and both Paper servers. Replace the Paper JAR on both backends and the Velocity JAR with 0.2.5; keep config/player files. Start the Paper backends, leaving V stopped during repair.
-2. Choose known generated, clear coordinates well inside an assigned region. Use the player's actual forwarded UUID (Floodgate UUID for Bedrock), not a guessed offline UUID.
-3. On the chosen backend's CONSOLE run `blinknet rescue PLAYER_UUID X Y Z`. The player need not join. Inventory/Ender Chest and profile modules are preserved; unknown, active and pending players are refused.
-4. If a stale active/handoff lock is reported, stop every process that might still hold the player's old session. From a separate management backend use `blinknet recover PLAYER_UUID ALL_PLAYER_SERVER_PROCESSES_STOPPED`, then `rescue`. Pending recovery uses the last committed SOURCE snapshot and may roll back post-checkpoint actions; review against backups. Never force recovery while an old player session could still be alive.
-5. Start V and test reconnect plus both crossing directions. Do not delete player rows, reset inventories, or reassign regions as a workaround.
+Supply private Neon JDBC URL/user/password in the existing config or `BLINK_NETWORK_JDBC_URL`, `BLINK_NETWORK_DB_USER`, `BLINK_NETWORK_DB_PASSWORD`. Never expose these to the map browser. Velocity modern forwarding and backend access restrictions are required on gameplay AND queue servers. All entry goes through Velocity. Do not use `/reload`.
 
-If a border still fails, collect the proxy/source/destination error logs. These guards stop repeat failures rather than silently trying unrelated world copies. Automated regression tests do not replace live Java/Bedrock testing.
+## Ownership and dimensions
 
-## Previous in 0.2.4
-- Adds per-player particle walls near region edges. Cyan means the neighboring region belongs to another backend; red means unassigned. Shared boundaries within the same server are invisible. Configure visibility, distance, spacing, height, update interval, and hex colors under `particle-border` on each Paper backend.
-- Treats a claimed destination as an accepted handoff during source timeout, preventing false "Transfer state changed" source kicks and any source overwrite after the target owns the snapshot. An incomplete/uncertain handoff remains fenced for safety.
-- Returning players connect through Velocity to the backend owning their **saved region**. If a player's last position is in an unassigned region, assign that region or recover the player to a verified safe coordinate; do not bypass ownership by forcing an unrelated backend.
-- These are staging fixes, not proof of end-to-end live transfer success. Test transfers in both directions and inspect proxy/source/destination logs on failures.
+Existing Overworld ownership automatically supplies missing Nether/End assignments on a backend advertising `all_dimensions=true`. An explicit assignment in that dimension overrides the mirror. For example, an Overworld region `(2,-1)` owned by Overworld-01 is also owned by it in the Nether and End unless separately assigned. This preserves previous explicit dimension owners rather than silently replacing terrain.
 
-## Previous in 0.2.2
-- Fixes initial player-data import on Paper 1.21.11 by accepting its 43-slot inventory layout (including body and saddle) and restores old 41-slot snapshots without dropping items. Always back up original `world/playerdata` before first import.
+`blinknet assign <Overworld|Nether|End> <regionX> <regionZ> <serverID>` remains console-only and INSERT-only. Existing ownership must only be moved with a planned terrain migration while affected servers are stopped. Coordinates use floor division, including negatives. World borders are separate per dimension. Check that Nether portal arrival coordinates and End spawn/return regions are assigned before opening them.
 
-- Each Overworld, Nether and End can have one shared square world border configured on the protected map admin website. All Paper instances in a dimension apply Neon-defined borders during their normal five-second refresh. Unconfigured dimensions retain their vanilla borders.
-- Crossing a region or teleporting to a coordinate on a different backend initiates a fenced player transfer through Velocity (the original 0.2.0 movement logic).
-- An offline returning player is routed according to the ownership of the region containing their saved position. Legacy snapshots without readable coordinates retain old behavior.
-- Server heartbeat initialization retries after transient Neon outages and duplicate instance claims; the plugin no longer remains permanently BLOCKED after a one-time failure.
-- Additive schema migration: create `blinksmp_network_v1.world_borders` **before deploying updated Paper JARs**, but keep `meta.version=2`. Do not overwrite existing player snapshots or active ownership. The map's removal operation deletes ownership metadata only, never world files. It rejects active players and protects the origin/spawn region.
+Homes using the BlinkNetwork bridge, Bukkit teleports, ender pearls, dimension portals and walking across regions all check ownership and readiness. An offline/unassigned/maintenance destination is cancelled with **This server is under maintenance. Please try again later.** Existing cached health is refreshed every 5 seconds, expires after 15 seconds, and transfer preparation also checks the database. An outage cannot be detected instantaneously; transfers racing a failure roll back safely to the source.
 
-## What is implemented
+## Dedicated restart queue
 
-- Two JARs: `BlinkNetwork-Paper-0.2.5.jar` for every backend and `BlinkNetwork-Velocity-0.2.5.jar` for the proxy. PostgreSQL driver and small connection pool are bundled.
-- Server IDs `BlinkSMP-(Overworld|Nether|End)-(01..99)`; additional registered servers need no code changes.
-- 9x9-chunk ownership regions (144x144 blocks), floor division for negative coordinates; initial ownership assignment, refresh within five seconds.
-- Automatic crossings to available destinations, vanilla teleport/portal destination interception, and reconnect routing using the player's saved coordinates and live region ownership. New players first enter the bootstrap server.
-- Main-thread item/state capture, off-thread JDBC, UUID session fencing and one-time pending tickets. Source quit never overwrites prepared destination state. Ordinary failed switches roll back only if the source still owns the handoff. Unknown database outcomes retain a lock rather than loading an arbitrary old inventory.
-- Serialized inventory/armor/offhand and Ender Chest using Paper NBT, selected slot, health, hunger, saturation, exhaustion, XP, gamemode, effects, air/fire and destination position. Effect timers pause during transfer. Fall distance is reset at arrival.
-- Only the configured local dimension/world is playable per backend. Unassigned/offline borders are blocked. Block break/place/interaction is restricted to assigned territory. Vehicles/passengers and open container/crafting transfers are rejected.
-- Persistent locks do not automatically expire after a process crash. Administrative recovery requires an explicit console acknowledgement.
-- **Opt-in profile sync:** Neon-backed versioned modules for rank, sanctions (ban/mute/warnings), homes, settings, statistics, and experimental advancements. All profile writes use optimistic revisions to reject lost updates. UltimateRanks, UltimateHomes and UltimateSettings are updated in this same repository and **must also be installed as matching builds**. Home records retain dimension metadata and remote `/home` destinations are handed to BlinkNetwork's region router. An enabled server polls for remote rank/ban changes.
+You need a third, separate Paper process/server, registered in `velocity.toml` as `BlinkSMP-Queue-01`. It cannot share the Velocity process or a gameplay server's directory/port. Its address must be supplied by the host; this release does not provision hosting accounts.
 
-## Not implemented by this release
+Install the SAME Paper JAR on that dedicated server, then set:
 
-- Chunk/build/entity migration or live region reassignment. Both world copies must be prepared before first assigning territory. Existing regions cannot be overwritten with `/blinknet assign`.
-- Vanish state, economy, trades, chat and TPR requests remain local. Cross-server homes are supported by the updated UltimateHomes adapter, but this does not implement a cross-server `/tpr` destination.
-- Recipe synchronization, respawn/bed binding across servers, player persistent-data/custom attributes, or arbitrary third-party plugin state. Player-data schema is versioned for future adapters. Advancement synchronization is **experimental and disabled by default** because granting criteria may retrigger rewards/commands; leave it off on production until reward-safe transfer behavior is validated.
-- Terrain tiles, public player tracking, or a built-in HTTP API. See WEBSITE-INTEGRATION.md for the actual DB contract; the website's previously proposed schema is not assumed to exist.
-- Seamless entity visibility, fluids/redstone across servers, or guaranteed invisible transitions. Separate world copies remain independent; avoid bases/farms straddling borders. Keep backups. A crash can roll back player data to the last successful checkpoint (normally <=30 seconds), and manual recovery needs review for inventory/world mismatches. This is not a crash-atomic world+inventory system.
+```yaml
+role: queue
+```
 
-## Installation — maintenance/test network first
+Queue mode runs even with `enabled: false`, does not open Neon, import inventory or run gameplay profiles. It clears the queue's independent local inventory, prevents interaction, damage, hunger and building, and keeps players near spawn with flight. Put a safe lobby spawn there and install no gameplay/inventory plugins on it. Configure the same Velocity forwarding secret and restrict direct backend access.
 
-1. Back up UltimateSMP's world and player/plugin data. Keep both communities' original files until the test network is verified.
-2. Put Velocity on `V` (2 GB). Register backend names exactly in `velocity.toml`, e.g.:
+In `plugins/blinknetwork/network.properties` on Velocity, set `queue-server=BlinkSMP-Queue-01` and register all gameplay backends under their exact IDs. The proxy probes queue health. Keep the queue running unless you configure a supported host-start endpoint.
 
-   ```toml
-   [servers]
-   BlinkSMP-Overworld-01 = "BACKEND_1_HOST:PORT"
-   BlinkSMP-Overworld-02 = "BACKEND_2_HOST:PORT"
-   try = ["BlinkSMP-Overworld-01"]
-   ```
+### Starting a sleeping queue
 
-   Use Velocity `online-mode = true` and modern player forwarding. Configure backend Paper `proxies.velocity.enabled`, matching forwarding secret and online-mode setting; backend server.properties online-mode=false belongs ONLY behind properly authenticated forwarding. Restrict direct backend access with firewall rules where available. Do not expose an unauthenticated offline backend. Disable the legacy BungeeCord plugin-message switching channel (`bungee-plugin-message-channel = false`) and remove ordinary players' `/server` access.
-3. Put the proxy JAR in Velocity's `plugins/`; put the Paper JAR in both Paper `plugins/` folders. Start once with their default `enabled=false` to generate configs, then stop.
-4. Prepare the two world copies. Same seed alone does not copy builds; use a stopped consistent copy of UltimateSMP's world as the starting point if preserving its terrain/builds. The runtime copies must have separate folders and storage. Set matching version, seed, generator and relevant datapacks. Allocate each region to only one backend. Default IDs are Overworld-01 and Overworld-02, with `world: world` on both. Each Nether/End backend instead names its actual local dimension world.
-5. **Stop the old proxy and all backends** and apply the new v2 `common/src/main/resources/schema.sql` using a Neon **direct** URL and a migration/admin role, first on an isolated development branch. Do not mix v1 and v2 network JARs. A console-only `blinknet schema` helper is also available on an enabled/configured backend, but normal runtime credentials should not have schema-creation rights. It is an explicit schema migration, never an automatic startup operation.
-6. Configure the same database/branch in both backends and the proxy. Recommended environment variables:
+Optional `BLINK_QUEUE_START_URL` (or `queue-start-url`) must point to YOUR operator-owned HTTPS endpoint that starts this specific queue server. The plugin sends POST with no body, at most once a minute while maintenance/queue demand exists. Optional `BLINK_QUEUE_START_TOKEN` supplies a Bearer token. Redirects are not followed; URLs/tokens are not logged. Your endpoint must validate authorization and use your host's documented power API. No host API path, server ID or credential is guessed. Leave blank for an always-running queue.
 
-   ```text
-   BLINK_NETWORK_JDBC_URL=jdbc:postgresql://NEON_HOST/DATABASE?sslmode=require&channelBinding=require
-   BLINK_NETWORK_DB_USER=ROLE
-   BLINK_NETWORK_DB_PASSWORD=PASSWORD
-   ```
+The plugin cannot start a powered-off server using Minecraft commands alone. A configured host API/webhook or an already-running queue is required. Host plan rules and sleep restrictions still apply.
 
-   Use the Java connection parameters from Neon's Connect dialog; its current example uses `sslmode=require&channelBinding=require`. The optional `verify-full` example in the generated config requires a configured trusted root certificate or an appropriate Java SSL factory. See https://neon.com/docs/guides/java.
+## Planned restarts
 
-   Alternatively use private config fields (never commit passwords). A normal `postgresql://user:password@...` URL is NOT JDBC syntax; split its credentials into the separate fields. The runtime can use a pooled Neon endpoint; use a direct URL for migrations. All copies must use the same logical database and schema. Do not reuse a backup plugin that independently loads inventories on join.
-7. Set distinct backend `server-id`, matching `world`, `proxy-security-configured: true`, and `enabled: true`. Set `import-local-players: true` ONLY on `BlinkSMP-Overworld-01` while intentionally importing local data. Unknown player records cannot bootstrap elsewhere. On the proxy set `enabled=true`, the same JDBC fields and `bootstrap-server=BlinkSMP-Overworld-01` in `plugins/blinknetwork/network.properties`.
-8. Start the backends. They register themselves as disabled until explicitly enabled. With console, register/enable each backend, then initially assign the regions you intend to make playable. Assign the entire spawn area before joining:
+From the gameplay console: `blinknet restart 60` (10–86400 seconds). Plain console `restart` and authorized in-game `/restart` are intercepted into a 10-second drain. This runs `restart`, never `stop`; the host must implement the actual restart behavior.
 
-   ```text
-   blinknet register BlinkSMP-Overworld-01
-   blinknet register BlinkSMP-Overworld-02
-   blinknet enable BlinkSMP-Overworld-01
-   blinknet enable BlinkSMP-Overworld-02
-   blinknet assign Overworld 0 0 BlinkSMP-Overworld-01
-   blinknet assign Overworld 1 0 BlinkSMP-Overworld-02
-   blinknet status
-   ```
+The backend immediately marks itself under maintenance, which requests queue startup through the proxy. Players see the final 10-second countdown. At expiry it waits for a healthy queue, closes containers, saves inventory/profiles, releases the exact gameplay session, and sends a verified queue ticket. Restart happens only after players have left the source. If queue readiness or saving/transfer does not complete within 120 seconds, restart is paused and logged; fix the problem and use console `blinknet resume`. External panel force-stops bypass this graceful path.
 
-   Region (0,0) is blocks x/z [0,144). Region (1,0) is x [144,288), z [0,144). If spawn is at negative coordinates, assign those regions too. Unassigned territory is closed. A new assignment assumes its terrain is already prepared; the command does not copy world files.
-9. **Profile migration:** leave `profile-sync.enabled: false` until a backup and staging test are complete. The same per-category choices must be enabled on every Paper backend. Configure `seed-missing-from-local: true` **only** on the original bootstrap server for a one-time migration of existing local rank/home/settings records into Neon; use `false` on all other servers. Each existing player should first join the bootstrap server to seed their missing categories. Then set `seed-missing-from-local: false` and fully restart. No module should be re-seeded from stale server files after migration. The v2 schema is required even if profile sync is off. Make sure all three Ultimate plugins are the matching updated versions.
+Queue players automatically return to their original server once ready, or switch to another healthy server if it is unavailable. `/leave` requests random safe relocation to a DIFFERENT gameplay backend, excluding the origin. It is handled by Velocity without command registration, so it is absent from tab/autocomplete. With no alternative safe landing, the player stays queued and receives a waiting message. Disconnecting never deletes gameplay inventory.
 
-10. Start/restart Velocity after schema/config are ready. Join only its public address. Configure Geyser/Floodgate at the proxy using their documented Velocity setup and consistent Bedrock UUID forwarding; do not run conflicting backend and proxy login paths. Verify Bedrock identities and gameplay in staging. This build does not auto-install or modify Geyser.
-11. Test item-rich transfers, both directions, disconnects, server outage, database outage, reconnect routing and existing gameplay-plugin compatibility. Also test: ranks granted across both backends, bans applied to offline and online players, warnings/mutes, settings toggles, local and remote homes across dimensions, and statistics. Enable advancements only on an isolated test server with a disposable player profile. Setup changes require full restarts; `/reload` is unsupported.
+## Unexpected outages and RTP
 
-## Website contract
+Players reconnecting to an unavailable world are routed to the queue. Network-disconnect events without a supplied kick reason can also route there. Explicit moderation kicks and rejected logins retain their disconnect behavior, so the queue does not bypass bans or repeatedly bounce failed restores.
 
-See WEBSITE-INTEGRATION.md. No website code was changed by this plugin release, and no production Neon schema/credentials were created or altered. Its connection fields are deliberately blank.
+RTP chooses a randomly sampled safe position on another healthy backend, inside assigned territory and its world border. Paper samples one random territory location every 5 seconds across its configured dimensions, generates only the sampled chunk asynchronously, rejects fluids/hazards/void and Nether-roof landings, and publishes verified points. Points expire after 45 seconds. Destination feet, head and floor are checked again before state is applied. There is no guarantee that every dimension has a usable candidate at every instant. If none exists, wait in the queue. A changed/blocked landing is rejected with the saved snapshot intact; reconnecting retries via the queue instead of repeating that landing indefinitely.
 
-## Recovery and troubleshooting
+A live player session is never force-unlocked just because a destination is disabled. After an actual heartbeat outage, recovery waits at least 45 seconds and permanently retires the old runtime instance before releasing the last committed snapshot. If a replacement process is already running, the snapshot's recorded owner instance allows the orphan to be fenced without stopping that replacement. The old process's later heartbeat/saves are rejected. This is recovery from the last committed inventory checkpoint, not distributed crash-atomic world persistence: unsaved gameplay since the last checkpoint may roll back. Profile revisions are retained.
 
-- Missing schema, wrong IDs/world environment, DB errors or duplicate live server IDs block login. Correct configuration then restart. Logs omit exception messages that might contain connection secrets.
-- A briefly unavailable destination leaves the player at the source; handoffs time out after 15 seconds. A loading player is disconnected after 30 seconds. An unavailable last-server is not replaced with an unrelated world/spawn.
-- If a lock survives a crash, stop **every server process that might still hold that player** before recovery. Leave one separate management backend connected, or execute a reviewed DB migration. On the management backend console:
+## Profiles and rescue
 
-  ```text
-  blinknet recover PLAYER_UUID ALL_PLAYER_SERVER_PROCESSES_STOPPED
-  ```
+Rank, sanctions, homes, settings and optional vanilla profiles retain the existing opt-in synchronization contract. Use matching network-aware Ultimate plugins. Profile CAS conflicts fail closed. Sanctions are imported before gameplay; queue has no gameplay permissions or inventory. Economy, trading and arbitrary plugin state are not automatically synchronized.
 
-  This uses the last committed source snapshot if a handoff was pending. It cannot reconstruct actions after the last checkpoint and must not be used to force access while the old process is alive. Inspect inventories and world changes before reopening. Audit records mark recovery.
-- Disabled mode does not enforce network login or routing; keep maintenance access controls until all components are enabled. Do not hot-disable/reload while players are online.
+Border transfers commit the source-side location, inset foreign seams by two blocks on restore, and enforce a cooldown. Console-only `blinknet rescue <UUID> <x> <y> <z>` repairs an OFFLINE snapshot at a generated safe point in this backend's primary dimension without changing items/profiles. Active locks cannot be bypassed. Manual `blinknet recover <UUID> ALL_PLAYER_SERVER_PROCESSES_STOPPED` is only for deliberate administrative recovery after every possible copy of that player process is stopped.
 
-## Build and verification
+## Validation
 
-`mvn -B -ntp -f blink-network/pom.xml verify`
-
-CI uses Java 21 and an isolated PostgreSQL 16 service. Policy tests cover floor boundaries, strict IDs, malformed tickets and routing. DB tests exercise real handoffs, concurrent claims, fencing, rollback, unavailable destinations, recovery, empty-login cleanup, payload bounds and immutable initial assignments. Without `TEST_JDBC_URL`, DB integration tests are explicitly skipped; CI always supplies it.
-
-## Profile sync behavior and caveats
-
-- Enable `profile-sync.enabled` on **every** Paper backend with identical category switches. The existing data stores remain on disk as local cache/backup; Neon revisions are authoritative once initialized.
-- Edits to rank/sanctions/settings/homes enqueue a database update. Player joins, 30-second checkpoints, transfers, and disconnects persist any changed enabled modules. Rank/sanction updates on another server are polled roughly every five seconds. An unexpected revision conflict is treated as a safety error, not silently overwritten.
-- A failed module write can leave a live player frozen or disconnected pending staff review. Back up both Neon and plugin files before migration. Reconcile local versus remote records before using `blinknet recover`; that command only recovers inventory/session data.
-- Home dimension information is new. Old home files infer the dimension from `_nether` / `_the_end` world names; if a legacy world used a custom name, review and correct its home data before migration. Remote homes use their coordinate's current assigned region; no chunk data is moved.
-- Statistics use Bukkit/Paper's native counters; large profiles can increase tick cost. Advancement progress uses native criteria APIs which may trigger advancement rewards again. It is **off by default** for this reason. Recipes, economy, and unrelated plugin data are not yet synchronized.
-- This is a staging release. Passing CI is not proof of correct behavior under network partitions, server crashes, overlapping edits, or Bedrock identities. Do not deploy directly to a public network.
-
+CI compiles both Java 21 artifacts and runs unit tests plus integration tests against isolated PostgreSQL 16. Tests cover dimension mirrors/overrides, stale instance fencing and replacement processes, maintenance blocking, exact-session queue saves, RTP inventory preservation, border-loop safety, inventory layout and kick-loop policy. Live host restart behavior, Bedrock/Geyser transfer presentation, actual portal terrain and your queue webhook require a staging test before opening the network.

@@ -26,3 +26,23 @@ No JWT/HTTP interface is implemented in this release. Plugins use PostgreSQL ove
 
 The runtime does not yet produce tile imagery or process migration jobs. Render a coordinate grid/ownership overlay until terrain tiles are connected. A 9x9-chunk ownership region is not a 32x32-chunk .mca region file. Do not copy whole .mca files to implement reassignment, edit loaded world files, or imply the map editor has moved builds.
 
+
+## Version 0.3.0 / schema 3 changes
+
+Physical server IDs retain their existing naming contract. A gameplay backend with `servers.all_dimensions=true` supplies effective ownership for a missing Nether/End region from its Overworld region at the SAME numeric region_x/region_z. Explicit dimension assignments take precedence. Both `/map/` and `/map/admin/` must show this effective ownership, not only raw rows. Suggested read query:
+
+```sql
+WITH effective AS (
+ SELECT dimension,region_x,region_z,server_id,0 AS priority FROM blinksmp_network_v1.regions
+ UNION ALL
+ SELECT d.dimension,r.region_x,r.region_z,r.server_id,1
+ FROM blinksmp_network_v1.regions r
+ JOIN blinksmp_network_v1.servers s ON s.id=r.server_id AND s.all_dimensions
+ CROSS JOIN (VALUES ('Nether'),('End')) d(dimension)
+ WHERE r.dimension='Overworld'
+)
+SELECT DISTINCT ON(dimension,region_x,region_z) dimension,region_x,region_z,server_id
+FROM effective ORDER BY dimension,region_x,region_z,priority;
+```
+
+The old composite dimension FK is removed by the migration. Validate new explicit owners against `all_dimensions OR servers.dimension=region.dimension` in the authenticated admin API. Do not silently turn a mirror into a reassignment or overwrite existing owned terrain; ownership migration remains a separate offline operation. Display `servers.maintenance` as maintenance even when its heartbeat is fresh. Queue is registered in Velocity, not as a terrain owner in the servers table. Never let the browser mutate player locks, queue tickets, retired instances, RTP points or queue health; those are trusted plugin-only state. Back up and migrate with all old plugin processes stopped.
