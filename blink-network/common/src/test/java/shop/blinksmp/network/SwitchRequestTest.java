@@ -21,4 +21,15 @@ class SwitchRequestTest {
         assertThrows(IOException.class,()->SwitchRequest.read(request.bytes(token),token,61_000));assertThrows(IOException.class,()->SwitchRequest.read(request.bytes(token),token,-100_000));
         assertThrows(IOException.class,()->SwitchRequest.read(new byte[257],token,1000));assertThrows(IllegalArgumentException.class,()->new SwitchRequest(UUID.randomUUID(),UUID.randomUUID(),"admin",1000));
     }
+    @Test void replayOfEarlierNonceIsRejectedEvenAfterOtherRequests(){
+        var guard=new SwitchReplayGuard();UUID a=UUID.randomUUID(),b=UUID.randomUUID();
+        assertTrue(guard.admit(a,61_000,1000));assertTrue(guard.admit(b,61_000,2000));assertFalse(guard.admit(a,61_000,3000));
+        assertFalse(guard.admit(UUID.randomUUID(),3000,3000));assertTrue(guard.admit(a,122_000,62_000));
+    }
+    @Test void replayCacheIsBoundedAndDoesNotEvictValidNonces(){
+        var guard=new SwitchReplayGuard();UUID first=UUID.randomUUID();assertTrue(guard.admit(first,60_000,0));
+        for(int i=1;i<32;i++)assertTrue(guard.admit(UUID.randomUUID(),60_000,0));
+        assertFalse(guard.admit(UUID.randomUUID(),60_000,0));assertFalse(guard.admit(first,60_000,1));
+        assertTrue(guard.admit(UUID.randomUUID(),120_000,60_000));
+    }
 }

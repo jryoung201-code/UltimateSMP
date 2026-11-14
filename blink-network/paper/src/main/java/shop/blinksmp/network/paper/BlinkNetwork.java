@@ -39,7 +39,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         final UUID token=UUID.randomUUID();volatile byte[] data;
         volatile boolean frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
         volatile UUID ticket;volatile String transferTarget;volatile long freezeAt=System.currentTimeMillis();
-        Location lastOwned;boolean borderQueued,navigationQueued;long automaticAfter,navigationAfter;UUID lastSwitch;
+        Location lastOwned;boolean borderQueued,navigationQueued;long automaticAfter,navigationAfter;final SwitchReplayGuard switchRequests=new SwitchReplayGuard();
         volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
         // Owned by the serialized I/O queue after the async prelogin claim.
         final Map<String,Long> profileVersions=new HashMap<>();
@@ -568,8 +568,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Session session=sessions.get(player.getUniqueId());if(session==null||!session.loaded||blocked(player))return;
         try{
             SwitchRequest request=SwitchRequest.read(bytes,session.token,System.currentTimeMillis());
-            if(!request.player().equals(player.getUniqueId())||request.nonce().equals(session.lastSwitch))return;
-            session.lastSwitch=request.nonce();
+            if(!request.player().equals(player.getUniqueId())||!session.switchRequests.admit(request.nonce(),request.expiresAt(),System.currentTimeMillis()))return;
             if(!player.hasPermission("blinknetwork.travel")){player.sendMessage("You cannot switch world servers.");return;}
             travelOverworld(player,request.target(),true);
         }catch(Exception ignored){} // Unauthenticated or replayed client messages never initiate a transfer.
