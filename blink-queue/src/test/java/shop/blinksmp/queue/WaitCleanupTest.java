@@ -20,8 +20,8 @@ class WaitCleanupTest {
         Field cap=BlinkQueue.class.getDeclaredField("capacity");cap.setAccessible(true);Semaphore slots=new Semaphore(0);cap.set(plugin,slots);
         Field field=BlinkQueue.class.getDeclaredField("attempts");field.setAccessible(true);Map<UUID,Object> attempts=(Map<UUID,Object>)field.get(plugin);
         Class<?> type=Class.forName("shop.blinksmp.queue.BlinkQueue$Attempt");
-        Constructor<?> constructor=type.getDeclaredConstructor(Player.class,WaitBudget.class,boolean.class);constructor.setAccessible(true);
-        Object attempt=constructor.newInstance(player,new WaitBudget(0,1),false);attempts.put(id,attempt);
+        Constructor<?> constructor=type.getDeclaredConstructor(Player.class,WaitBudget.class);constructor.setAccessible(true);
+        Object attempt=constructor.newInstance(player,new WaitBudget(0,1));attempts.put(id,attempt);
         Method remove=BlinkQueue.class.getDeclaredMethod("remove",type);remove.setAccessible(true);
         Method fail=BlinkQueue.class.getDeclaredMethod("fail",type,String.class);fail.setAccessible(true);
         if(completed)assertEquals(true,remove.invoke(plugin,attempt));

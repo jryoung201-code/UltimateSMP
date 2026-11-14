@@ -50,7 +50,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(getConfig().getString("role","world").equalsIgnoreCase("queue")){getServer().getPluginManager().registerEvents(new QueueLobby(this),this);return;}
         Objects.requireNonNull(getCommand("blinknet")).setExecutor(this);
         if(!getConfig().getBoolean("enabled")){getLogger().info("Disabled in config; /blinknet status is available.");return;}
-        queueServer=getConfig().getString("queue-server","BlinkSMP-Queue-01");
+        queueServer=getConfig().getString("queue-id",getConfig().getString("queue-server","BlinkSMP-Queue-01"));
         active=true;getServer().getPluginManager().registerEvents(this,this);
         try {
             if(!Bukkit.getOnlinePlayers().isEmpty())throw new IllegalStateException("Start with no players; /reload is unsupported");
@@ -595,7 +595,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Bukkit.broadcastMessage("Restarting......");
         final int[] attempts={0};
         new org.bukkit.scheduler.BukkitRunnable(){public void run(){
-            if(++attempts[0]>=120){cancel();getLogger().severe("Restart paused: queue unavailable or player transfers unfinished. Fix the problem then use blinknet resume.");return;}
+            if(++attempts[0]>=120){cancel();getLogger().severe("Restart paused: virtual queue unavailable or player transfers unfinished. Fix the problem then use blinknet resume.");return;}
             if(!queueAvailable)return;
             boolean pending=false;
             for(Player p:Bukkit.getOnlinePlayers()){
@@ -624,7 +624,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         }catch(Exception ex){problem("Queue capture failed",ex);}
     }
     @Override public boolean onCommand(CommandSender sender,Command command,String label,String[] args){
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.3.0: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.4.0: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         if(args[0].equalsIgnoreCase("restart")){try{scheduleRestart(args.length>1?Integer.parseInt(args[1]):10);sender.sendMessage("Restart scheduled; new arrivals blocked.");}catch(Exception ex){sender.sendMessage("Usage: blinknet restart <10..86400 seconds>");}return true;}

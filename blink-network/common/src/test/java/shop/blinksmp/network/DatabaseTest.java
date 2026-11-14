@@ -199,5 +199,15 @@ class DatabaseTest {
         assertFalse(db.heartbeat(server,old));assertTrue(db.heartbeat(server,fresh));assertTrue(db.ready(server));
     }
 
+    @Test void staleRestartSessionCanRejoinHealthyOriginWithoutPhysicalQueue()throws Exception{
+        String server="BlinkSMP-Overworld-03";UUID old=UUID.randomUUID(),fresh=UUID.randomUUID(),p=UUID.randomUUID(),session=UUID.randomUUID();
+        db.register(server);db.enable(server,true);db.heartbeat(server,old);db.assign(new Region("Overworld",1,0),server);
+        byte[] bytes=position(164,20);db.claim(p,server,session,true);db.save(p,session,bytes,false);
+        try(Connection c=DriverManager.getConnection(System.getenv("TEST_JDBC_URL"),"postgres","postgres");Statement q=c.createStatement()){q.execute("UPDATE blinksmp_network_v1.servers SET heartbeat=now()-interval '46 seconds' WHERE id='"+server+"'");}
+        assertTrue(db.heartbeat(server,fresh));assertTrue(db.releaseDeadSession(p));assertTrue(db.ready(server));
+        assertEquals(server,db.loginTarget(p,db.route(p)));assertFalse(db.heartbeat(server,old));assertFalse(db.save(p,session,new byte[]{9},true));
+        assertArrayEquals(bytes,db.claim(p,server,UUID.randomUUID(),false));assertTrue(db.heartbeat(server,fresh));
+    }
+
 }
 
