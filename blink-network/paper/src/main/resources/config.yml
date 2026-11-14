@@ -1,9 +1,10 @@
 # Install on every Paper backend, NOT on Velocity. Requires Java 21 / Paper 1.21.11.
 # Run once to create this file, configure, then fully restart. No /reload support.
 enabled: false
-# world = gameplay backend; queue = dedicated empty holding server (no database access).
+# Use world on every gameplay backend. Queue is hosted virtually on Velocity.
 role: world
-queue-server: BlinkSMP-Queue-01
+# Internal protocol/status identifier. No physical queue server is needed.
+queue-id: BlinkSMP-Queue-01
 all-dimensions: true
 worlds:
   Overworld: world

@@ -1,50 +1,51 @@
-# BlinkQueue 1.0.0
+# BlinkQueue 1.1.0 — entirely virtual queue
 
-A separate Velocity plugin that displays a real virtual waiting room while the dedicated Paper queue backend starts. It does not fake player counts, keep free servers awake, or replace host power controls.
+The waiting room IS the queue now. It lives inside Velocity using LimboAPI. No separate Paper queue server, queue IP/port, host-start endpoint or paid host API is needed. It only works while the Velocity proxy itself is running.
 
-## Install on the proxy
+## Install
 
-1. Back up the proxy plugins/config and fully stop Velocity.
-2. Use Java **25** for the Velocity process. Paper servers may remain on Java 21. This release uses LimboAPI **1.2.0**, whose API and plugin require Java 25. Use a Velocity build compatible with that LimboAPI release (its declared API target is 3.4.0); test your exact build first because LimboAPI also hooks proxy internals.
-3. Install `BlinkQueue-Velocity-1.0.0.jar` AND the official [LimboAPI 1.2.0 JAR](https://github.com/Elytrium/LimboAPI/releases/tag/1.2.0) in Velocity's `plugins/` folder. LimboAPI is a separate runtime dependency, not bundled into BlinkQueue.
-4. If using BlinkNetwork, replace ONLY its proxy JAR with `BlinkNetwork-Velocity-0.3.1.jar`. Existing Paper **0.3.0** is compatible; schema remains **3**, with no new migration. Never run duplicate BlinkNetwork proxy JARs. Keep all existing database and forwarding settings.
-5. Keep the real queue registered in `velocity.toml` under `BlinkSMP-Queue-01`, with its actual host address. The dedicated Paper queue still needs BlinkNetwork Paper configured with `role: queue` and secure Velocity forwarding.
-6. Start Velocity once to generate `plugins/blinkqueue/queue.properties`. Set the queue ID and optional start endpoint, then restart again. No hot reload is supported.
+1. Stop Velocity and back up its plugin/config files. Replace `BlinkQueue-Velocity-1.0.0.jar` with `BlinkQueue-Velocity-1.1.0.jar`, and replace its BlinkNetwork proxy JAR with `BlinkNetwork-Velocity-0.4.0.jar`. Do not keep duplicate versions.
+2. Keep **LimboAPI 1.2.0** installed on Velocity and run the proxy with **Java 25**. Its own configuration may remain unchanged.
+3. On each gameplay backend install `BlinkNetwork-Paper-0.4.0.jar` during a normal coordinated restart. Paper 0.3.0's saved-ticket drain protocol remains compatible, but the new Paper JAR has updated queue configuration/status wording. Paper remains on Java 21. Database schema remains **3**, with no new migration.
+4. Remove the physical queue entry from Velocity's `[servers]` and from its `try` list. Keep the real Overworld/Nether/End backend entries and bootstrap ID. You can stop/decommission the former dedicated queue process after upgrading; no world files or host resources are automatically deleted.
+5. Use the small `plugins/blinkqueue/queue.properties` below. Old queue-server, default-server, queue-start-url, ping and host retry keys are ignored. The plugin sends no HTTP startup requests.
 
 ```properties
 enabled=true
-queue-server=BlinkSMP-Queue-01
-default-server=BlinkSMP-Overworld-01
-max-wait-seconds=180
+max-wait-seconds=600
 poll-seconds=3
 max-waiting-players=100
-queue-start-url=
 ```
 
-`default-server` is only used in standalone mode without BlinkNetwork. In BlinkNetwork mode, its existing player database route decides whether an arriving player needs the queue; healthy gameplay logins continue normally after a short virtual route check.
+Existing files retain their configured timeout (including 180 seconds from 1.0.0) unless you change it. The maximum supported timeout is 3600 seconds.
 
-## Startup controls
+BlinkNetwork's existing Neon JDBC credentials, enabled flag and bootstrap-server stay unchanged. Its internal `queue-id=BlinkSMP-Queue-01` is a protocol/status key, NOT a backend address. The old `queue-server` key is accepted as an alias for this key, so old Paper 0.3.0 configs still match. Do not register that key in `velocity.toml`. Use the same internal ID on proxy and gameplay backends.
 
-Set `BLINK_QUEUE_START_URL` or `queue-start-url` to an operator-owned **HTTPS** endpoint that starts this exact queue server through your host's supported API. BlinkQueue sends POST with no body and follows no redirects. Optional `BLINK_QUEUE_START_TOKEN` adds an Authorization Bearer header. Configure the endpoint securely outside Minecraft; no API path, credentials or hosting permissions are invented by this plugin.
+Example Velocity entries (keep your actual world addresses):
 
-BlinkNetwork 0.3.1 delegates its startup requests to BlinkQueue when available, avoiding duplicate host calls. This also warms the queue when maintenance is scheduled, before players need it. If the endpoint is blank, players can still wait while an administrator starts the queue manually. The plugin itself does not provision servers or bypass sleep rules.
+```toml
+[servers]
+BlinkSMP-Overworld-01 = "37.72.174.58:50110"
+BlinkSMP-Overworld-02 = "104.243.40.149:50012"
+try = ["BlinkSMP-Overworld-01"]
+```
 
-## Player flow
+Keep the rest of your `velocity.toml`, especially forwarding security and bind settings. For abrupt socket failures, enable `failover-on-unexpected-server-disconnect = true` in Velocity.
 
-- At login, LimboAPI provides a small glass platform on the proxy while the network route is checked. Its normal authentication/plugin callback sequence is preserved. This room has no gameplay inventory and never claims or modifies Neon player records.
-- If the player needs a sleeping queue, a title says **Starting queue server...** and the countdown is shown. The proxy issues a startup request and performs one shared ping probe, not one per player.
-- Planned restart transfers use BlinkNetwork's existing exact-session save and verified queue ticket before leaving the source. They can wait virtually without the Paper queue running yet, then connect when ready.
-- Unexpected network disconnects also use the room. Bans, kicks with supplied moderation reasons and unsafe player-data restore rejections retain their original result. Failed transfers to a gameplay backend retain BlinkNetwork's source rollback behavior.
-- After a successful queue ping, LimboAPI resumes the connection to the registered Paper queue through normal Velocity/BlinkNetwork routing. BlinkNetwork then handles inventory recovery and safe RTP as before. A successful ping is a readiness hint; final backend login checks still apply.
-- A network failure racing that handoff can re-enter limbo, but the original fixed deadline is retained. Repeated failures cannot create an endless wait. Default limit: 180 seconds; capacity: 100 virtual players; startup requests at most once every 60 seconds.
-- `/leave` remains the hidden BlinkNetwork command on the **real Paper queue**. The virtual startup room does not promise an inventory-safe early exit before that queue is reachable.
+## Behavior
 
-For abrupt socket failures, enable `failover-on-unexpected-server-disconnect = true` in Velocity. The proxy itself must stay running: if the proxy stops, this plugin and its virtual players stop with it.
+Every login gets a short route check in limbo. Healthy saved worlds connect directly; their availability does not depend on a physical queue. If no world can safely accept the player, the player stays on the virtual glass platform with a waiting title/countdown. Route availability is rechecked while waiting, so the player can leave limbo when a world becomes ready.
 
-## Compatibility and testing
+For planned restarts, Paper saves inventory/profiles and releases only its exact gameplay session before sending a verified drain ticket. Velocity acknowledges virtual queue readiness through the existing schema-3 queue-status record. Once the player has left the gameplay process, Paper dispatches `restart`, never `stop`. In virtual queue, a planned restart prefers its original world if ready; otherwise safe RTP can use another healthy backend.
 
-Builds target Java 25 and use the official LimboAPI release API, not hand-built Minecraft packets. Because 1.2.0 is not yet published in its Maven repository, CI downloads the official 1.2.0 JAR, verifies its SHA-256 against the GitHub release digest, and installs it locally as a provided-only compile dependency. It is never included in the BlinkQueue JAR. Follow the same preparation step in `.github/workflows/queue.yml` when building locally. CI compiles and runs policy tests for bounded deadlines, startup configuration and moderation handling, plus the existing BlinkNetwork/PostgreSQL regression suite. No live host endpoint, production inventory, proxy session or backend is changed by the build.
+Unexpected world disconnects use the same virtual queue. A live active player session is never bypassed. Stale sessions are recovered using BlinkNetwork's existing old-instance fencing, including the case where a new process is healthy on the SAME server ID. Last committed inventory data is preserved; gameplay after the last checkpoint can still roll back after a crash. Correct region ownership and a safe loaded landing are still required.
 
-Stage a Java 1.21.11 join and a Geyser/Floodgate Bedrock join using your exact Velocity/LimboAPI versions, including a planned restart, sudden backend loss, failed queue boot, a ban, and a client disconnect during limbo. Configure Floodgate's required pre-limbo profile hooks according to LimboAPI/Floodgate documentation before opening Bedrock access. Packet-level compatibility and host startup behavior are not established merely by compilation.
+Type **`/leave`** in virtual queue to request safe RTP on a DIFFERENT gameplay backend, excluding the original source. The command is handled through LimboAPI's command/chat callback and is never registered in a command tree or autocomplete. New players need their initial bootstrap import before they can use cross-server inventory recovery. With no eligible destination, stay queued. World selection never claims an active inventory or manufactures a fresh empty one.
 
-Other plugins that own LimboAPI's kick callback must be tested together: BlinkQueue preserves a previously installed callback, but cannot control callbacks replaced later by another plugin. Install only one reconnect/queue manager for this flow.
+A world admission has a short exact-target reservation, revalidated against Neon before connecting. Changed routes, live session locks and stale targets fail closed. Network failures racing a handoff can re-enter the queue without resetting the original fixed wait budget. Explicit moderation kicks and unsafe restore rejections are preserved. Queue capacity is released once, and an old timeout callback cannot kick a player who has already connected successfully.
+
+## Validation and limits
+
+CI builds the Java 25 queue plugin and the Java 21 network artifacts, runs queue/bridge/command/admission tests and PostgreSQL integration tests, including stale-session recovery followed by direct rejoin of a healthy original backend without a physical queue.
+
+LimboAPI is compiled against its official checksum-pinned release JAR because its 1.2.0 Maven artifact is not published. It remains a separate runtime dependency and is not bundled. Test Java 1.21.11 and Geyser/Floodgate clients with your exact proxy build before opening the network. LimboAPI's required profile hooks and any authentication-plugin kick callbacks still need to be configured correctly. The build does not install plugins on live hosts or delete a hosting server.

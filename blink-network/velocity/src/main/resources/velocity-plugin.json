@@ -1,2 +1,2 @@
-{"id":"blinknetwork","name":"BlinkNetwork","version":"0.3.1","description":"Verified BlinkSMP region transfers and reconnect routing","authors":["RealJR_25736"],"main":"shop.blinksmp.network.velocity.BlinkNetworkProxy"}
+{"id":"blinknetwork","name":"BlinkNetwork","version":"0.4.0","description":"Verified BlinkSMP region transfers and reconnect routing","authors":["RealJR_25736"],"main":"shop.blinksmp.network.velocity.BlinkNetworkProxy"}
 
