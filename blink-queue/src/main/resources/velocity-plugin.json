@@ -1,0 +1,1 @@
+{"id":"blinkqueue","name":"BlinkQueue","version":"1.0.0","description":"Virtual waiting room while the real queue backend starts","authors":["RealJR_25736"],"main":"shop.blinksmp.queue.BlinkQueue","dependencies":[{"id":"limboapi","optional":false},{"id":"blinknetwork","optional":true}]}
