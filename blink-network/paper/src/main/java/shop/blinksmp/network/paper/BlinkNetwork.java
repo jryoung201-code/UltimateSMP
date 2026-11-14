@@ -25,7 +25,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private volatile Map<String,NetworkStore.Border> networkBorders=Map.of();
     private final Map<String,Long> appliedBorderRevisions=new HashMap<>();
     private final Map<String,World> worlds=new HashMap<>();
-    private volatile boolean maintenance,queueAvailable;private boolean restartDispatch;private String queueServer;
+    private volatile boolean maintenance,queueAvailable;private boolean initialized;private boolean restartDispatch;private String queueServer;
     private static final String MAINTENANCE="This server is under maintenance. Please try again later.";
     private volatile Set<String> online=Set.of();
     private volatile long refreshed;
@@ -71,12 +71,13 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             profiles=new ProfileSync(this);
             seedProfiles=profiles.active()&&id.equals(bootstrap)&&getConfig().getBoolean("profile-sync.seed-missing-from-local",false);
             getServer().getMessenger().registerOutgoingPluginChannel(this,Protocol.CHANNEL);
-            io.execute(()->{try{db.verify();db.register(id);if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");db.dimensions(id,worlds.size()==3);db.maintenance(id,false);refresh();ready=true;}catch(Exception e){problem("Startup failed; joins blocked",e);}});
+            io.execute(()->{try{db.verify();db.register(id);if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");db.dimensions(id,worlds.size()==3);db.maintenance(id,false);initialized=true;refresh();ready=true;}catch(Exception e){problem("Startup failed; joins blocked",e);}});
             Bukkit.getScheduler().runTaskTimer(this,()->{
                 if(refreshing.compareAndSet(false,true))io.execute(()->{
                     try {
                         if(!ready){db.verify();db.register(id);}
                         if(!db.heartbeat(id,instance))throw new IllegalStateException("Duplicate server ID is running");
+                        if(!initialized){db.dimensions(id,worlds.size()==3);db.maintenance(id,false);initialized=true;}
                         refresh();
                         if(!ready)getLogger().info("BlinkNetwork reconnected and is ready.");
                         ready=true;
@@ -603,7 +604,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             io.execute(()->{try{
                 persistProfiles(p.getUniqueId(),s,modules);
                 if(!db.queue(p.getUniqueId(),s.token,id,ticket,data))throw new IllegalStateException("Lost queue session");
-                main(()->{s.ticket=null;if(p.isOnline())p.sendPluginMessage(this,Protocol.CHANNEL,new Protocol(p.getUniqueId(),ticket,queueServer).bytes());});
+                main(()->{s.ticket=null;if(p.isOnline())try{p.sendPluginMessage(this,Protocol.CHANNEL,new Protocol(p.getUniqueId(),ticket,queueServer).bytes());}catch(java.io.IOException ex){problem("Queue packet failed; saved state retained",ex);}});
             }catch(Exception ex){problem("Queue save failed",ex);main(()->{s.transferring=false;s.frozen=false;s.ticket=null;});}});
         }catch(Exception ex){problem("Queue capture failed",ex);}
     }
