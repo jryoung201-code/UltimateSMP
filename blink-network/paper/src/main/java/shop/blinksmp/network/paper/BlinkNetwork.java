@@ -678,7 +678,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             if(args.length!=1){sender.sendMessage("Usage: /blinkserver <server-ID>");return true;}
             try{Region.dimensionOf(args[0]);travelOverworld(player,args[0],true);}catch(Exception ex){sender.sendMessage("Use a registered BlinkSMP gameplay server ID.");}return true;
         }
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.4.1: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.5.0: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         if(args[0].equalsIgnoreCase("restart")){try{scheduleRestart(args.length>1?Integer.parseInt(args[1]):10);sender.sendMessage("Restart scheduled; new arrivals blocked.");}catch(Exception ex){sender.sendMessage("Usage: blinknet restart <10..86400 seconds>");}return true;}
