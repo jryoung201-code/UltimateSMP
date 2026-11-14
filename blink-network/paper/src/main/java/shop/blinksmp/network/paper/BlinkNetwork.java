@@ -215,7 +215,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private boolean owned(Location l){return !active||(worlds.containsValue(l.getWorld())&&withinBorder(dimension(l.getWorld()),l.getX(),l.getZ())&&id.equals(regions.get(Region.at(dimension(l.getWorld()),l.getX(),l.getZ()))));}
     private boolean safe(Location l){World w=l.getWorld();return l.getY()>=w.getMinHeight()&&l.getY()<w.getMaxHeight()-1&&w.getWorldBorder().isInside(l)&&l.getBlock().isPassable()&&l.clone().add(0,1,0).getBlock().isPassable()&&!hazard(l.getBlock().getType())&&!hazard(l.clone().add(0,1,0).getBlock().getType());}
     private static boolean hazard(Material m){return m==Material.LAVA||m==Material.WATER||m==Material.FIRE||m==Material.SOUL_FIRE||m==Material.CACTUS||m==Material.MAGMA_BLOCK||m==Material.CAMPFIRE||m==Material.SOUL_CAMPFIRE||m==Material.POWDER_SNOW||m==Material.SWEET_BERRY_BUSH||m==Material.WITHER_ROSE;}
-    private boolean safeFloor(Location l){Material floor=l.clone().subtract(0,1,0).getBlock().getType();return owned(l)&&safe(l)&&floor.isSolid()&&!hazard(floor)&&(l.getWorld().getEnvironment()!=World.Environment.NETHER||l.getY()<126);}
+    private boolean safeFloor(Location l){if(!owned(l)||!safe(l))return false;Material floor=l.clone().subtract(0,1,0).getBlock().getType();return floor.isSolid()&&!hazard(floor)&&(l.getWorld().getEnvironment()!=World.Environment.NETHER||l.getY()<126);}
     private void restoreProfiles(Player p,Session s,boolean vanilla) throws Exception {
         if(profiles==null||!profiles.active())return;
         // A bootstrap import retains the local plugin files. Existing network records are authoritative.

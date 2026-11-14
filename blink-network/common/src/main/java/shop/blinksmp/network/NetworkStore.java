@@ -245,7 +245,7 @@ public final class NetworkStore implements AutoCloseable {
                     q.setObject(1,player);try(ResultSet r=q.executeQuery()){
                         if(!r.next()||!"offline".equals(r.getString(1))||r.getBytes(2)==null)throw new SQLException("Player must be offline with a saved snapshot; active locks are not bypassed");
                         payload=SnapshotPosition.relocate(r.getBytes(2),dimension,x,y,z);
-                        if(rtp)payload=(new String(payload,StandardCharsets.UTF_8).replaceAll("(?m)^rtp-arrival:.*\\R?", "")+"\nrtp-arrival: true\n").getBytes(StandardCharsets.UTF_8);
+                        payload=(new String(payload,StandardCharsets.UTF_8).replaceAll("(?m)^(?:rtp-arrival|portal-arrival):.*\\R?", "")+(rtp?"\nrtp-arrival: true\n":"")).getBytes(StandardCharsets.UTF_8);
                     }
                 }
                 try(PreparedStatement q=c.prepareStatement("UPDATE "+S+"players SET payload=?,last_server=?,updated_at=now() WHERE player_id=? AND state='offline'")){

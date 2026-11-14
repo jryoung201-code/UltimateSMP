@@ -185,7 +185,7 @@ class DatabaseTest {
         UUID p=UUID.randomUUID(),session=UUID.randomUUID();db.claim(p,A,session,true);byte[] before=position(12,12);db.save(p,session,before,false);
         var points=db.rtpPoints(A);assertEquals(1,points.size());
         assertThrows(SQLException.class,()->db.rerouteOffline(p,points.getFirst()));
-        db.save(p,session,before,true);assertTrue(db.rerouteOffline(p,points.getFirst()));assertEquals(B,db.loginTarget(p,db.route(p)));
+        db.save(p,session,before,true);assertTrue(db.rerouteOffline(p,points.getFirst()));assertEquals(B,db.loginTarget(p,db.route(p)));assertTrue(db.rtpPending(p));
         String after=new String(db.claim(p,B,UUID.randomUUID(),false),java.nio.charset.StandardCharsets.UTF_8);
         assertTrue(after.contains("inventory: PRESERVE_ITEM_NBT"));assertTrue(after.contains("rtp-arrival: true"));
         db.maintenance(B,true);assertTrue(db.rtpPoints(A).isEmpty());
