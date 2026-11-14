@@ -110,7 +110,7 @@ public final class BlinkNetworkProxy {
                     if(request.target().equals(queueServer)){
                         if(!db.queued(player.getUniqueId(),from,request.ticket()))return;
                         waiting.put(player.getUniqueId(),new Waiting(from,false));startQueue();queuePermits.put(player.getUniqueId(),from);
-                        proxy.getServer(queueServer).ifPresent(server->player.createConnectionRequest(server).connect());return;
+                        if(!queueBridge("holdForQueue",player))proxy.getServer(queueServer).ifPresent(server->player.createConnectionRequest(server).connect());return;
                     }
                     NetworkStore.Route route=db.route(player.getUniqueId());
                     if(route==null||!route.permits(from,request.target())||!request.ticket().equals(route.ticket())||!db.ready(request.target())){player.sendMessage(Component.text(MAINTENANCE));return;}
@@ -166,6 +166,31 @@ public final class BlinkNetworkProxy {
         }catch(Exception ex){log.warn("Queue recovery paused ({}); saved state retained.",ex.getClass().getSimpleName());}
         finally{if(!connecting)busy.remove(player.getUniqueId());}
     }
+    /** Public API consumed by BlinkQueue, preserving the same database route rules. */
+    public CompletableFuture<Boolean> queueRequired(UUID player){
+        return CompletableFuture.supplyAsync(()->{
+            if(!ready)throw new CompletionException(new IllegalStateException("Network is not ready"));
+            try {
+                NetworkStore.Route route=db.route(player);
+                String target=route==null?bootstrap:db.loginTarget(player,route);
+                return waiting.containsKey(player)||(route!=null&&route.state().equals("active"))||!db.ready(target)||db.rtpPending(player);
+            }catch(Exception ex){throw new CompletionException(new IllegalStateException("Network route unavailable"));}
+        },io);
+    }
+    /** Called only for Velocity's network-failure callback, never for supplied moderation reasons. */
+    public boolean queueRecovery(Player player,String origin){
+        if(!ready||!player.isActive())return false;
+        if(origin.equals(queueServer))return waiting.containsKey(player.getUniqueId());
+        try{Region.dimensionOf(origin);}catch(IllegalArgumentException ex){return false;}
+        if(proxy.getServer(origin).isEmpty())return false;
+        waiting.put(player.getUniqueId(),new Waiting(origin,true));queuePermits.put(player.getUniqueId(),origin);startQueue();return true;
+    }
+    private boolean queueBridge(String method,Player player){
+        Optional<Object> bridge=proxy.getPluginManager().getPlugin("blinkqueue").flatMap(com.velocitypowered.api.plugin.PluginContainer::getInstance);
+        if(bridge.isEmpty())return false;
+        try{return Boolean.TRUE.equals(player==null?bridge.get().getClass().getMethod(method).invoke(bridge.get()):bridge.get().getClass().getMethod(method,Player.class).invoke(bridge.get(),player));}
+        catch(ReflectiveOperationException ex){log.warn("BlinkQueue bridge unavailable; check matching plugin versions.");return false;}
+    }
     private void probeQueue(){
         proxy.getServer(queueServer).ifPresent(server->server.ping().orTimeout(3,TimeUnit.SECONDS).whenComplete((ping,error)->{
             if(!ready)return;
@@ -174,6 +199,7 @@ public final class BlinkNetworkProxy {
     }
     private void startQueue(){
         // Optional operator-owned HTTPS webhook. No panel URLs or credentials are guessed.
+        if(queueBridge("wakeQueue",null))return;
         if(startUrl.isBlank()||System.currentTimeMillis()-lastStart<60_000)return;
         try{if(db.queueReady(queueServer))return;}catch(java.sql.SQLException ex){return;}
         lastStart=System.currentTimeMillis();
