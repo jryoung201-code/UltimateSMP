@@ -234,13 +234,14 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         }
         refreshHiddenNames();return changed;
     }
+    private void publishNetworkState(Player p){var bridge=Bukkit.getPluginManager().getPlugin("UltimateNetwork");if(bridge!=null&&bridge.isEnabled())try{bridge.getClass().getMethod("publishNetworkState",Player.class).invoke(bridge,p);}catch(ReflectiveOperationException ex){getLogger().warning("Network presence update unavailable");}}
     private void setVanish(Player p,boolean enabled) {
         if(enabled) {
             vanished.add(p.getUniqueId());p.setMetadata("vanished",new FixedMetadataValue(this,true));
             for(Player viewer:Bukkit.getOnlinePlayers()) updateVisibility(viewer);
             for(Entity e:p.getNearbyEntities(48,48,48)) if(e instanceof Mob mob && p.equals(mob.getTarget())) mob.setTarget(null);
         } else releaseLocalVanish(p.getUniqueId());
-        refreshHiddenNames();
+        refreshHiddenNames();publishNetworkState(p);
         say(p,enabled?"&aVanish enabled. Hidden from all other players, including staff.":"&eVanish disabled.");
     }
     private void delayedVisibility() {
@@ -340,7 +341,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             if(action.equals("vanish")) {
                 Player p=self(s);
                 if(!VanishBridge.toggle(gui(),p,vanished.contains(p.getUniqueId()))) setVanish(p,!vanished.contains(p.getUniqueId()));
-                return true;
+                publishNetworkState(p);return true;
             }
             if(action.equals("gsp")) {
                 Player p=self(s); require(!frozen.containsKey(p.getUniqueId()),"You are frozen.");

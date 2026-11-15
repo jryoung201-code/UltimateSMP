@@ -54,6 +54,7 @@ public final class UltimateNetworkProxy {
   }catch(IllegalArgumentException ex){tell(carrier.getUniqueId(),ex.getMessage());}catch(Exception ex){log.warn("Rejected network bridge frame ({})",ex.getClass().getSimpleName());}
  }
  private void state(Player p,Wire f){
+  send(p,Wire.of("ACK",p.getUniqueId()));
   boolean hidden=Boolean.parseBoolean(f.at(0)),ready=Boolean.parseBoolean(f.at(5));String carry=carryVanish.get(p.getUniqueId());
   if(carry!=null){if(!hidden){send(p,Wire.of("VANISH",p.getUniqueId(),"true"));hidden=true;}else carryVanish.remove(p.getUniqueId());}
   State next=new State(server(p),hidden,Boolean.parseBoolean(f.at(1)),Boolean.parseBoolean(f.at(2)),Boolean.parseBoolean(f.at(3)),f.at(4),ready,Boolean.parseBoolean(f.at(6)),Boolean.parseBoolean(f.at(7)),Boolean.parseBoolean(f.at(8)),Boolean.parseBoolean(f.at(9)),f.at(10),Integer.parseInt(f.at(11)),now());
@@ -62,7 +63,7 @@ public final class UltimateNetworkProxy {
   if(old==null||!same(old,next))rosters();
  }
  private static boolean same(State a,State b){return a.server.equals(b.server)&&a.hidden==b.hidden&&a.messages==b.messages&&a.joins==b.joins&&a.players==b.players&&a.ready==b.ready&&a.authority.equals(b.authority)&&a.trade==b.trade&&a.muted==b.muted&&a.homeAdmin==b.homeAdmin&&a.tags==b.tags&&a.prefix.equals(b.prefix)&&a.weight==b.weight;}
- private void rosters(){tabs();List<String> entries=proxy.getAllPlayers().stream().filter(this::visible).limit(256).map(p->p.getUniqueId()+"|"+p.getUsername()+"|"+server(p)).toList();for(Player p:proxy.getAllPlayers())send(p,new Wire(UUID.randomUUID(),"ROSTER",p.getUniqueId(),entries));}
+ private void rosters(){tabs();List<String> entries=proxy.getAllPlayers().stream().filter(this::visible).map(p->p.getUniqueId()+"|"+p.getUsername()+"|"+server(p)).toList();for(Player p:proxy.getAllPlayers()){send(p,Wire.of("ROSTER_BEGIN",p.getUniqueId()));for(int i=0;i<entries.size();i+=100)send(p,new Wire(UUID.randomUUID(),"ROSTER",p.getUniqueId(),entries.subList(i,Math.min(i+100,entries.size()))));}}
  private void tabs(){
   for(Player viewer:proxy.getAllPlayers()){
    var tab=viewer.getTabList();if(tab==null)continue;State v=states.get(viewer.getUniqueId());if(v==null)continue;
