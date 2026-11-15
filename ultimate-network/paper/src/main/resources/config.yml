@@ -1,0 +1,3 @@
+# Uses Velocity plugin messaging for live actions and BlinkNetwork/Gravel for saved data.
+# Install the matching Velocity JAR. Confirm modern forwarding and secure backend access.
+# Join/leave messages are emitted only by the proxy after the player data is ready.

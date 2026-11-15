@@ -92,6 +92,12 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
         nextAutomatic=tick+settings.interval();
         if(paused || !settings.enabled() || settings.notices().isEmpty() || Bukkit.getOnlinePlayers().isEmpty()) return;
         int index=rotation.next(settings.notices().size(),settings.random(),ThreadLocalRandom.current());
+        var bridge=Bukkit.getPluginManager().getPlugin("UltimateNetwork");
+        var net=Bukkit.getPluginManager().getPlugin("BlinkNetwork");
+        if(bridge!=null&&bridge.isEnabled()&&net instanceof JavaPlugin jp){
+            String leader=getConfig().getString("network.automatic-leader",jp.getConfig().getString("bootstrap-server","BlinkSMP-Overworld-02"));
+            if(!leader.equals(jp.getConfig().getString("server-id")))return;
+        }
         broadcast(settings.notices().get(index));
     }
     private Component text(String raw,Player player,int seconds) {
@@ -113,7 +119,18 @@ public final class UltimateAnnouncements extends JavaPlugin implements TabComple
             }
         }
     }
-    private void broadcast(Notice notice) { for(Player player:Bukkit.getOnlinePlayers()) show(notice,player); }
+    public void showNetworkNotice(Player player,String display,List<String> lines,int duration){
+        if(!Bukkit.isPrimaryThread()||duration<1||duration>60||lines.isEmpty()||lines.size()>16)throw new IllegalArgumentException("Invalid network notice");
+        show(new Notice("network",Display.valueOf(display),List.copyOf(lines),duration),player);
+    }
+    private void broadcast(Notice notice) {
+        var bridge=Bukkit.getPluginManager().getPlugin("UltimateNetwork");
+        if(bridge!=null&&bridge.isEnabled())try{
+            boolean sent=(Boolean)bridge.getClass().getMethod("broadcastNotice",String.class,List.class,int.class).invoke(bridge,notice.display().name(),notice.lines(),notice.duration());
+            if(sent)return;
+        }catch(ReflectiveOperationException ex){getLogger().warning("Network announcement unavailable; using local broadcast");}
+        for(Player player:Bukkit.getOnlinePlayers()) show(notice,player);
+    }
     private void restartNotice(int remaining) {
         for(Player player:Bukkit.getOnlinePlayers()) {
             if(settings.restartChat()) player.sendMessage(text(settings.countdown(),player,remaining));

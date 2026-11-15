@@ -30,7 +30,7 @@ jobs:
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.settings.PreferenceStoreTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateSettings-1.1.0
-          path: ultimate-settings/target/UltimateSettings-1.1.0.jar
+          name: UltimateSettings-1.2.0
+          path: ultimate-settings/target/UltimateSettings-1.2.0.jar
           if-no-files-found: error
 

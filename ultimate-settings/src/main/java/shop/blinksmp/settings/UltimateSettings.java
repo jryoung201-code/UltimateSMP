@@ -69,6 +69,10 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         boosts.clear(); boards.clear(); previousBoards.clear(); clicked.clear(); excludingMonsters.clear(); spawnRanges.clear();
     }
     // Public bridge methods are thread-safe snapshot reads used by UltimateRanks.
+    public boolean allowsNetworkMessages(UUID id){return store==null||store.get(id).messages();}
+    public boolean allowsNetworkJoinMessages(UUID id){return store==null||store.get(id).joinMessages();}
+    public boolean showsNetworkPlayers(UUID id){return store==null||store.get(id).players();}
+    private boolean networkPresence(){var p=Bukkit.getPluginManager().getPlugin("UltimateNetwork");return p!=null&&p.isEnabled();}
     public boolean showRankTags(UUID id) { return store==null || store.get(id).rankTags(); }
     public boolean managesRankTab() { return isEnabled() && manageBoards; }
     public void refreshRankDisplays() { if(Bukkit.isPrimaryThread()) refreshBoards(); }
@@ -260,12 +264,12 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         });
     }
     @EventHandler(priority=EventPriority.HIGHEST) public void joinNotice(PlayerJoinEvent e) {
-        Component message=e.joinMessage(); if(message==null) return;
+        Component message=e.joinMessage(); if(networkPresence()){e.joinMessage(null);return;} if(message==null) return;
         e.joinMessage(null); sendNotice(e.getPlayer(),message);
     }
     @EventHandler(priority=EventPriority.HIGHEST) public void quit(PlayerQuitEvent e) {
         Player p=e.getPlayer(); Component message=e.quitMessage();
-        if(message!=null) { e.quitMessage(null); sendNotice(p,message); }
+        if(message!=null) { e.quitMessage(null); if(!networkPresence())sendNotice(p,message); }
         restoreBooster(p); releaseBoard(p); clicked.remove(p.getUniqueId()); excludingMonsters.remove(p.getUniqueId());spawnRanges.remove(p.getUniqueId());
         for(Scoreboard board:boards.values()) { Team team=board.getEntryTeam(p.getName()); if(team!=null) team.removeEntry(p.getName()); }
     }
@@ -297,4 +301,5 @@ public final class UltimateSettings extends JavaPlugin implements Listener,TabCo
         if(e.getPlugin()==ranks) { ranks=null; rankName=rankPrefix=rankWeight=null; for(Player p:Bukkit.getOnlinePlayers()) releaseBoard(p); }
     }
 }
+
 

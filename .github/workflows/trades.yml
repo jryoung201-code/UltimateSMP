@@ -29,6 +29,6 @@ jobs:
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.trades.InventoryPlanTest
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateTrades-1.0.1
-          path: ultimate-trades/target/UltimateTrades-1.0.1.jar
+          name: UltimateTrades-1.1.0
+          path: ultimate-trades/target/UltimateTrades-1.1.0.jar
           if-no-files-found: error

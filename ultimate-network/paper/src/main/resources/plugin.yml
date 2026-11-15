@@ -1,0 +1,27 @@
+name: UltimateNetwork
+version: 1.0.0
+main: shop.ultimatesmp.network.paper.UltimateNetworkPaper
+api-version: '1.21.11'
+depend: [BlinkNetwork]
+softdepend: [UltimateRanks, UltimateHomes, UltimateSettings, UltimateTrades, UltimateTPR, UltimateGUI, UltimateAnnouncements, UltimateBedrockChat]
+author: Aven
+commands:
+  ultimatenetwork:
+    aliases: [unetwork]
+    description: Show network bridge status
+  tpa:
+    description: Request a teleport to any network player
+  tpahere:
+    description: Request a network player to teleport to you
+  tpaccept:
+    description: Accept a network teleport request
+  tpdeny:
+    description: Decline a network teleport request
+  tpcancel:
+    description: Cancel a network teleport request
+  msg:
+    aliases: [tell, w, whisper, pm]
+    description: Private message across the network
+  reply:
+    aliases: [r]
+    description: Reply across the network

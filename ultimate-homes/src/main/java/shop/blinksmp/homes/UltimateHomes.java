@@ -154,6 +154,18 @@ public final class UltimateHomes extends JavaPlugin implements Listener,TabCompl
         }catch(IllegalArgumentException ex){say(sender,ex.getMessage());}
         catch(IOException ex){say(sender,"Could not save home limit; previous data preserved. Check console.");getLogger().severe("Home limit update failed: "+ex);}
     }
+    public void applyNetworkHomeLimit(UUID target,String actor,String[] args,java.util.function.Consumer<String> reply)throws IOException{
+        if(!Bukkit.isPrimaryThread()||Bukkit.getPlayer(target)==null)throw new IllegalArgumentException("Target must be online on this server");
+        Integer value=null;
+        if(args.length==3&&args[1].equalsIgnoreCase("set")){
+            if(!args[2].matches("[0-9]+"))throw new IllegalArgumentException("Use a nonnegative whole number");
+            try{value=Integer.valueOf(args[2]);}catch(NumberFormatException ex){throw new IllegalArgumentException("Home limit too large");}
+            if(value==HomeLimits.UNLIMITED)throw new IllegalArgumentException("Maximum numeric override is 2147483646");
+        }else if(args.length!=2||!args[1].equalsIgnoreCase("reset"))throw new IllegalArgumentException("Use /maxhomes <player> set <number> or reset");
+        store.setOverride(target,value);profileChanged(target);
+        String message=value==null?"Home limit reset to rank/permission grants.":"Home limit set to "+value+". OWNER/unlimited permission takes priority.";
+        reply.accept(message);say(Bukkit.getPlayer(target),message);getLogger().info(actor+" changed network home limit for "+target);
+    }
     private void failure(Player p,IOException error) { say(p,"Could not read/save your homes. Existing data was preserved; ask staff to check console.");getLogger().severe("Home data error for "+p.getUniqueId()+": "+error); }
     private void save(Player p,String rawName) throws IOException {
         if(p.isDead() || p.isSleeping() || p.isInsideVehicle()) throw new IllegalArgumentException("Be alive, awake and outside a vehicle to set a home.");
