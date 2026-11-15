@@ -1,0 +1,16 @@
+name: UltimateCrates
+version: 1.0.0
+main: shop.ultimatesmp.crates.UltimateCrates
+api-version: '1.21.11'
+softdepend: [BlinkNetwork, UltimateRanks, UltimateSpawn]
+author: Aven
+commands:
+  crates:
+    aliases: [crate, ucrates]
+    description: Customize crates, rewards and keys
+    usage: /crates
+permissions:
+  ultimatecrates.admin:
+    default: op
+  ultimatecrates.use:
+    default: true
