@@ -606,10 +606,18 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void drop(PlayerDropItemEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void pickup(EntityPickupItemEvent e){if(e.getEntity() instanceof Player p&&blocked(p))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void damage(EntityDamageEvent e){if(e.getEntity() instanceof Player p&&blocked(p))e.setCancelled(true);if(e instanceof EntityDamageByEntityEvent d&&d.getDamager() instanceof Player p&&blocked(p))e.setCancelled(true);}
-    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interact(PlayerInteractEvent e){if(blocked(e.getPlayer())||(e.getClickedBlock()!=null&&!owned(e.getClickedBlock().getLocation())))e.setCancelled(true);}
+    private boolean canEditAt(Player player,Location location){
+        if(blocked(player))return false;
+        AuxiliaryWorld auxiliary=auxiliaryWorlds.get(location.getWorld().getName());
+        boolean registered=auxiliary!=null&&auxiliary.world()==location.getWorld();
+        return WorldEditPolicy.allowed(false,registered,
+            registered&&auxiliary.owner().isEnabled()&&location.getWorld().getWorldBorder().isInside(location),
+            player.hasPermission("edit.spawn"),registered?false:owned(location));
+    }
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interact(PlayerInteractEvent e){if(blocked(e.getPlayer())||(e.getClickedBlock()!=null&&!canEditAt(e.getPlayer(),e.getClickedBlock().getLocation())))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interactEntity(PlayerInteractEntityEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
-    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void breaking(BlockBreakEvent e){if(blocked(e.getPlayer())||!owned(e.getBlock().getLocation()))e.setCancelled(true);}
-    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void placing(BlockPlaceEvent e){if(blocked(e.getPlayer())||!owned(e.getBlock().getLocation()))e.setCancelled(true);}
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void breaking(BlockBreakEvent e){if(!canEditAt(e.getPlayer(),e.getBlock().getLocation()))e.setCancelled(true);}
+    @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void placing(BlockPlaceEvent e){if(!canEditAt(e.getPlayer(),e.getBlock().getLocation()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void hunger(FoodLevelChangeEvent e){if(e.getEntity() instanceof Player p&&blocked(p))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void held(PlayerItemHeldEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
     @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void swap(PlayerSwapHandItemsEvent e){if(blocked(e.getPlayer()))e.setCancelled(true);}
