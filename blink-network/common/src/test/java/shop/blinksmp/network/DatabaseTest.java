@@ -19,6 +19,13 @@ class DatabaseTest {
         db=new NetworkStore(System.getenv("TEST_JDBC_URL"),USER,PASSWORD);db.initialize();db.verify();db.register(A);db.register(B);db.enable(A,true);db.enable(B,true);db.heartbeat(A,UUID.randomUUID());db.heartbeat(B,UUID.randomUUID());
     }
     @AfterEach void close(){if(db!=null)db.close();}
+    @Test void auxiliarySpawnHandoffAndRestartPreservePhysicalLocationAndInventory()throws Exception{
+        db.assign(new Region("Overworld",-1,0),A);db.assign(new Region("Overworld",0,0),B);
+        UUID p=UUID.randomUUID(),source=UUID.randomUUID(),dest=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,source,true);
+        byte[] origin=position(-12,12);byte[] auxiliary=(new String(position(12,12),java.nio.charset.StandardCharsets.UTF_8)+"auxiliary-world: ultimate_spawn\nauxiliary-x: 4.5\nauxiliary-y: 80.0\nauxiliary-z: 6.5\nauxiliary-yaw: 90.0\nauxiliary-pitch: 0.0\n").getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        db.save(p,source,origin,false);assertTrue(db.prepare(p,source,B,ticket,origin,auxiliary));assertArrayEquals(auxiliary,db.claim(p,B,dest,false));
+        assertTrue(db.save(p,dest,auxiliary,false));db.maintenance(B,true);assertTrue(db.queue(p,dest,B,UUID.randomUUID(),auxiliary));assertEquals(B,db.loginTarget(p,db.route(p)));db.maintenance(B,false);assertArrayEquals(auxiliary,db.claim(p,B,UUID.randomUUID(),false));
+    }
     @Test void emptyFirstProfileIsDistinguishedFromSavedInventory()throws Exception{
         UUID p=UUID.randomUUID(),session=UUID.randomUUID();assertFalse(db.hasSavedSnapshot(p));assertNull(db.claim(p,B,session,true));assertFalse(db.hasSavedSnapshot(p));db.abandonEmpty(p,session);assertFalse(db.hasSavedSnapshot(p));
         UUID next=UUID.randomUUID();db.claim(p,B,next,false);assertTrue(db.save(p,next,position(1,1),true));assertTrue(db.hasSavedSnapshot(p));
