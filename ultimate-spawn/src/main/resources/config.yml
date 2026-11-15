@@ -1,0 +1,7 @@
+# Blank uses BlinkNetwork's bootstrap-server. Keep identical config on both backends.
+spawn-server: ''
+world-name: ultimate_spawn
+world-border-size: 256
+warmup-seconds: 3
+cooldown-seconds: 5
+# JDBC credentials are read from BlinkNetwork. MySQL/MariaDB required.

@@ -1,0 +1,20 @@
+name: UltimateSpawn
+version: 1.0.0
+main: shop.ultimatesmp.spawn.UltimateSpawn
+api-version: '1.21.11'
+depend: [BlinkNetwork]
+softdepend: [UltimateRanks]
+author: Aven
+commands:
+  spawn:
+    description: Travel to the protected network spawn world
+    permission: ultimatespawn.use
+  setspawn:
+    description: Set the arrival point inside the spawn world
+    permission: edit.spawn
+permissions:
+  ultimatespawn.use:
+    default: true
+  edit.spawn:
+    description: Edit the protected spawn world and set its arrival point
+    default: false

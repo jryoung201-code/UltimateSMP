@@ -25,10 +25,10 @@ prefixes:
   MEMBER: '&7[MEMBER] &r'
 # Grants from every assigned rank combine; staff hierarchy remains fixed.
 # Never grants OP or wildcard '*'.
-# Restart after editing this config.
+# Use /rank reload after editing. Existing rank names and staff hierarchy stay fixed.
 extra-permissions:
-  OWNER: [ultimateoptimize.admin]
-  DEV: [ultimateoptimize.admin]
+  OWNER: [ultimateoptimize.admin, edit.spawn]
+  DEV: [ultimateoptimize.admin, edit.spawn]
   ADMIN: [ultimateoptimize.admin]
   MOD: []
   TRIAL_MOD: []
@@ -41,3 +41,7 @@ extra-permissions:
 # Ultimate home limits (3/5/9) are built in and also apply with older configs.
 # Extra permissions are additive; another higher maxhomes.# permission still wins.
 
+
+# Migration marker: after upgrading, removing edit.spawn from a role is respected.
+migrations:
+  spawn-edit-permission: true
