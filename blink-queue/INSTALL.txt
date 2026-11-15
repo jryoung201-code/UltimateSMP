@@ -1,0 +1,10 @@
+Velocity/plugins:
+  BlinkQueue-Velocity-1.2.0.jar
+  BlinkNetwork-Velocity-0.5.2.jar
+  Keep LimboAPI and your other Velocity plugins.
+
+BOTH Paper world servers/plugins:
+  BlinkNetwork-Paper-0.5.2.jar
+  Keep UltimateNetwork and all your other existing plugins.
+
+Replace the previous versions; never leave duplicate JARs. Keep existing config files and database data. Fully restart both Paper servers and Velocity. No schema migration is required.

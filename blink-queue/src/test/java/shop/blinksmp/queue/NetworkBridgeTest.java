@@ -9,11 +9,17 @@ import static org.junit.jupiter.api.Assertions.*;
 class NetworkBridgeTest {
     public static class Good {
         UUID seen;
+        public String queueMode(UUID id){return "restart";}
+        public boolean queueCanLeave(UUID id){return true;}
+        public boolean queueBeginJoin(UUID id){return true;}
         public CompletableFuture<String> queueDestination(UUID player){seen=player;return CompletableFuture.completedFuture("BlinkSMP-Overworld-02");}
         public CompletableFuture<Boolean> queueLeave(UUID player){return CompletableFuture.completedFuture(true);}
         public boolean queueRecovery(Player player,String origin){return origin.equals("BlinkSMP-Overworld-01");}
     }
     public static class Broken {
+        public String queueMode(UUID id){throw new IllegalStateException();}
+        public boolean queueCanLeave(UUID id){throw new IllegalStateException();}
+        public boolean queueBeginJoin(UUID id){throw new IllegalStateException();}
         public CompletableFuture<String> queueDestination(UUID player){throw new IllegalStateException();}
         public CompletableFuture<Boolean> queueLeave(UUID player){throw new IllegalStateException();}
         public boolean queueRecovery(Player player,String origin){throw new IllegalStateException();}

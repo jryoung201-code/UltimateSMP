@@ -1,2 +1,2 @@
-{"id":"blinkqueue","name":"BlinkQueue","version":"1.1.1","description":"Virtual waiting room while the real queue backend starts","authors":["RealJR_25736"],"main":"shop.blinksmp.queue.BlinkQueue","dependencies":[{"id":"limboapi","optional":false},{"id":"blinknetwork","optional":false}]}
+{"id":"blinkqueue","name":"BlinkQueue","version":"1.2.0","description":"Separate virtual Join and Restart queues with original-location return","authors":["RealJR_25736"],"main":"shop.blinksmp.queue.BlinkQueue","dependencies":[{"id":"limboapi","optional":false},{"id":"blinknetwork","optional":false}]}
 

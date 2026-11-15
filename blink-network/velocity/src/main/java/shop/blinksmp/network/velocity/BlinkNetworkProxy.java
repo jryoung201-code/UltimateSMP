@@ -28,11 +28,12 @@ public final class BlinkNetworkProxy {
     private final TransferThrottle transferThrottle=new TransferThrottle();
     private final Map<UUID,Long> switchAfter=new ConcurrentHashMap<>();
     private static final MinecraftChannelIdentifier SWITCH=MinecraftChannelIdentifier.from(SwitchRequest.CHANNEL);
-    private final Map<UUID,Waiting> waiting=new ConcurrentHashMap<>();
+    private final Map<UUID,QueueIntent> waiting=new ConcurrentHashMap<>();
     private final Map<UUID,QueuePermit> permits=new ConcurrentHashMap<>();
     private final AtomicBoolean polling=new AtomicBoolean();
     private NetworkStore db;private String bootstrap,queueId;private volatile boolean active,ready;
-    private record Waiting(String origin,boolean rtp) {}
+    private final Set<UUID> restartEscapes=ConcurrentHashMap.newKeySet();
+    private final Map<UUID,Object> queueLocks=new ConcurrentHashMap<>();
     @Inject public BlinkNetworkProxy(ProxyServer proxy,Logger log,@DataDirectory Path directory){this.proxy=proxy;this.log=log;this.directory=directory;}
     @Subscribe public void start(ProxyInitializeEvent event){
         try {
@@ -104,8 +105,8 @@ public final class BlinkNetworkProxy {
             }
         });
     }
-    @Subscribe public void connected(ServerConnectedEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());}
-    @Subscribe public void disconnected(DisconnectEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());switchAfter.remove(event.getPlayer().getUniqueId());}
+    @Subscribe public void connected(ServerConnectedEvent event){UUID id=event.getPlayer().getUniqueId();waiting.remove(id);permits.remove(id);restartEscapes.remove(id);}
+    @Subscribe public void disconnected(DisconnectEvent event){waiting.remove(event.getPlayer().getUniqueId());permits.remove(event.getPlayer().getUniqueId());switchAfter.remove(event.getPlayer().getUniqueId());restartEscapes.remove(event.getPlayer().getUniqueId());}
     @Subscribe public void message(PluginMessageEvent event){
         if(event.getIdentifier().equals(SWITCH)){event.setResult(PluginMessageEvent.ForwardResult.handled());return;}
         if(!event.getIdentifier().equals(CHANNEL))return;
@@ -120,7 +121,7 @@ public final class BlinkNetworkProxy {
                     if(!player.isActive()||player.getCurrentServer().filter(c->c==source).isEmpty())return;
                     if(request.target().equals(queueId)){
                         if(!db.queued(player.getUniqueId(),from,request.ticket()))return;
-                        waiting.put(player.getUniqueId(),new Waiting(from,false));permits.remove(player.getUniqueId());
+                        waiting.put(player.getUniqueId(),QueueIntent.restart(from));permits.remove(player.getUniqueId());
                         if(!queueBridge("holdForQueue",player))player.disconnect(Component.text("Virtual queue is unavailable. Your saved inventory is preserved."));
                         return;
                     }
@@ -132,58 +133,69 @@ public final class BlinkNetworkProxy {
             });
         }catch(IOException ignored){}
     }
-    /** Select a world and reserve one admission. An empty string means safely keep waiting. */
+    /** Every new network login starts in Join Queue, even if the player has saved state. */
+    public boolean queueBeginJoin(UUID player){
+        if(!active)return false;
+        waiting.put(player,QueueIntent.join(null));restartEscapes.remove(player);permits.remove(player);return true;
+    }
+    public String queueMode(UUID player){QueueIntent intent=waiting.get(player);return intent!=null&&intent.mode()==QueueIntent.Mode.RESTART?"restart":"join";}
+    public boolean queueCanLeave(UUID player){QueueIntent intent=waiting.get(player);return ready&&intent!=null&&intent.canLeave();}
+    /** Restart waits never change a saved snapshot or use an RTP fallback. */
     public CompletableFuture<String> queueDestination(UUID player){
         return CompletableFuture.supplyAsync(()->{
-            if(!ready)throw new CompletionException(new IllegalStateException("Network is not ready"));
-            try {
-                NetworkStore.Route route=db.route(player);
-                if(route!=null&&!route.state().equals("offline")){
-                    if(db.releaseDeadSession(player))route=db.route(player);
-                    else if(!route.state().equals("handoff")){
-                        waiting.putIfAbsent(player,new Waiting(route.last(),false));return "";
+            synchronized(queueLocks.computeIfAbsent(player,key->new Object())){
+                if(!ready)throw new CompletionException(new IllegalStateException("Network is not ready"));
+                try{
+                    NetworkStore.Route route=db.route(player);
+                    QueueIntent intent=waiting.computeIfAbsent(player,key->QueueIntent.join(null));
+                    if(intent.origin()==null){intent=intent.resolved(route==null?bootstrap:route.last());waiting.put(player,intent);}
+                    if(route!=null&&!route.state().equals("offline")){
+                        if(db.releaseDeadSession(player))route=db.route(player);
+                        else if(!route.state().equals("handoff"))return "";
                     }
-                }
-                String target=route==null?bootstrap:db.loginTarget(player,route);
-                String origin=route==null?bootstrap:route.last();
-                Waiting wait=waiting.computeIfAbsent(player,key->new Waiting(origin,false));
-                String intent=wait.origin()+":"+wait.rtp();
-                QueuePermit existing=permits.get(player);
-                if(existing!=null&&Objects.equals(existing.intent(),intent)&&existing.allows(target,System.nanoTime())&&db.ready(target))return target;
-                if(route!=null&&route.state().equals("handoff")){
-                    if(!db.ready(target))return ""; // Source/target still own the exact pending ticket.
-                }else if(route!=null&&((wait!=null&&wait.rtp())||!db.ready(target)||db.rtpPending(player))){
-                    String exclude=wait==null?target:wait.origin();boolean selected=false;
-                    for(NetworkStore.Rtp point:db.rtpPoints(exclude)){
-                        if(proxy.getServer(point.server()).isPresent()&&db.rerouteOffline(player,point)){target=point.server();selected=true;break;}
+                    String target=route==null?bootstrap:intent.mode()==QueueIntent.Mode.JOIN&&intent.needsRtp()&&route.state().equals("offline")?route.last():db.loginTarget(player,route);
+                    QueuePermit permit=permits.get(player);
+                    if(permit!=null&&Objects.equals(permit.intent(),intent.key())&&permit.allows(target,System.nanoTime())&&db.ready(target))return target;
+                    if(route!=null&&route.state().equals("handoff")){
+                        if(!db.ready(target))return ""; // Never redirect an owned transfer ticket.
+                    }else if(route!=null&&intent.mode()==QueueIntent.Mode.JOIN&&db.hasSavedSnapshot(player)){
+                        if(intent.needsRtp()||!db.ready(target)){
+                            String exclude=intent.origin();
+                            // Fresh joins may RTP on any world. Leaving a restart excludes its origin.
+                            if(!restartEscapes.contains(player))exclude="";
+                            boolean selected=false;
+                            for(NetworkStore.Rtp point:db.rtpPoints(exclude)){
+                                if(waiting.get(player)!=intent)return "";
+                                if(proxy.getServer(point.server()).isPresent()&&db.rerouteOffline(player,point)){
+                                    target=point.server();intent=intent.prepared(target);waiting.put(player,intent);selected=true;break;
+                                }
+                            }
+                            if(!selected)return "";
+                        }
                     }
-                    if(!selected){waiting.putIfAbsent(player,new Waiting(exclude,false));return "";}
-                }
-                if(proxy.getServer(target).isEmpty()||!db.ready(target)){
-                    waiting.putIfAbsent(player,new Waiting(target,false));return "";
-                }
-                if(waiting.get(player)!=wait)return "";
-                permits.put(player,new QueuePermit(target,System.nanoTime()+TimeUnit.SECONDS.toNanos(20),intent));
-                return target;
-            }catch(Exception ex){throw new CompletionException(new IllegalStateException("Network route unavailable"));}
+                    // An entirely new player must first load/import their inventory on bootstrap.
+                    // Paper then runs the first-join Overworld RTP after that inventory is ready.
+                    if(proxy.getServer(target).isEmpty()||!db.ready(target)||waiting.get(player)!=intent)return "";
+                    permits.put(player,new QueuePermit(target,System.nanoTime()+TimeUnit.SECONDS.toNanos(20),intent.key()));return target;
+                }catch(Exception ex){throw new CompletionException(new IllegalStateException("Network route unavailable"));}
+            }
         },io);
     }
-    /** Called by the virtual room's unregistered /leave handler. New players need bootstrap first. */
+    /** Only a player who was evacuated from an active world can choose an alternate RTP. */
     public CompletableFuture<Boolean> queueLeave(UUID player){
         return CompletableFuture.supplyAsync(()->{
-            if(!ready)return false;
-            try{
-                NetworkStore.Route route=db.route(player);if(route==null)return false;
-                Waiting old=waiting.get(player);
-                waiting.put(player,new Waiting(old==null?route.last():old.origin(),true));permits.remove(player);return true;
-            }catch(Exception ex){return false;}
+            synchronized(queueLocks.computeIfAbsent(player,key->new Object())){
+                if(!ready)return false;QueueIntent old=waiting.get(player);if(old==null||!old.canLeave())return false;
+                try{if(db.route(player)==null)return false;waiting.put(player,old.leave());restartEscapes.add(player);permits.remove(player);return true;}catch(Exception ex){return false;}
+            }
         },io);
     }
-    /** Called only for a trusted Velocity network-failure callback, not moderation kicks. */
+    /** Network loss while already playing preserves that world's last committed location. */
     public boolean queueRecovery(Player player,String origin){
         if(!ready||!player.isActive()||proxy.getServer(origin).isEmpty())return false;
         try{Region.dimensionOf(origin);}catch(IllegalArgumentException ex){return false;}
-        waiting.put(player.getUniqueId(),new Waiting(origin,true));permits.remove(player.getUniqueId());return true;
+        waiting.computeIfAbsent(player.getUniqueId(),key->QueueIntent.restart(origin));
+        permits.remove(player.getUniqueId());return true;
     }
     private boolean queueBridge(String method,Player player){
         Optional<Object> bridge=proxy.getPluginManager().getPlugin("blinkqueue").flatMap(PluginContainer::getInstance);
