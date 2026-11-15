@@ -19,6 +19,14 @@ class DatabaseTest {
         db=new NetworkStore(System.getenv("TEST_JDBC_URL"),USER,PASSWORD);db.initialize();db.verify();db.register(A);db.register(B);db.enable(A,true);db.enable(B,true);db.heartbeat(A,UUID.randomUUID());db.heartbeat(B,UUID.randomUUID());
     }
     @AfterEach void close(){if(db!=null)db.close();}
+    @Test void restartQueueRetainsExactNetherLocationAndInventoryWhenSourceReturns()throws Exception{
+        db.dimensions(A,true);Region region=new Region("Overworld",4,-3);db.assign(region,A);
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);
+        byte[] saved=SnapshotPosition.relocate(position(4*144+12,-3*144+12),"Nether",4*144+12,73.25,-3*144+12);
+        assertTrue(db.save(p,session,saved,false));db.maintenance(A,true);assertTrue(db.queue(p,session,A,ticket,saved));
+        assertFalse(db.ready(A));assertTrue(db.queued(p,A,ticket));assertEquals(A,db.loginTarget(p,db.route(p)));
+        db.maintenance(A,false);assertTrue(db.ready(A));assertArrayEquals(saved,db.claim(p,A,UUID.randomUUID(),false));
+    }
     @Test void initializeAndAdministrativeFlagsAreIdempotent()throws Exception{
         db.initialize();db.verify();db.register(A);db.enable(A,true);db.enable(A,true);
         db.maintenance(A,false);db.maintenance(A,false);assertTrue(db.ready(A));

@@ -16,19 +16,23 @@ import static org.junit.jupiter.api.Assertions.*;
 /** Exercise the public virtual queue with only a world backend registered. No Minecraft socket is faked. */
 class VirtualQueueFlowTest {
     public static class Routes {
+        String mode="join";
+        public String queueMode(UUID id){return mode;}
+        public boolean queueCanLeave(UUID id){return mode.equals("restart");}
+        public boolean queueBeginJoin(UUID id){mode="join";return true;}
         volatile CompletableFuture<String> next=CompletableFuture.completedFuture("");
         final AtomicInteger calls=new AtomicInteger(),leaves=new AtomicInteger();
         public CompletableFuture<String> queueDestination(UUID id){calls.incrementAndGet();return next;}
-        public CompletableFuture<Boolean> queueLeave(UUID id){leaves.incrementAndGet();return CompletableFuture.completedFuture(true);}
+        public CompletableFuture<Boolean> queueLeave(UUID id){leaves.incrementAndGet();mode="join";return CompletableFuture.completedFuture(true);}
         public boolean queueRecovery(Player player,String origin){return true;}
     }
     static class Harness {
         final UUID id=UUID.randomUUID();final Routes routes=new Routes();
         final AtomicInteger worldConnections=new AtomicInteger(),kicks=new AtomicInteger();
-        final List<String> lookups=new ArrayList<>();final BlinkQueue plugin;LimboSessionHandler handler;
+        final List<String> lookups=new ArrayList<>(),messages=new ArrayList<>();final BlinkQueue plugin;LimboSessionHandler handler;
         Harness()throws Exception{
             Player player=(Player)Proxy.newProxyInstance(Player.class.getClassLoader(),new Class<?>[]{Player.class},(p,m,a)->switch(m.getName()){
-                case "getUniqueId"->id;case "isActive"->true;case "disconnect"->{kicks.incrementAndGet();yield null;}default->null;
+                case "getUniqueId"->id;case "isActive"->true;case "sendMessage","sendActionBar"->{messages.add(a[0].toString());yield null;}case "disconnect"->{kicks.incrementAndGet();yield null;}default->null;
             });
             ServerInfo info=new ServerInfo("BlinkSMP-Overworld-02",new InetSocketAddress("127.0.0.1",25565));
             RegisteredServer world=(RegisteredServer)Proxy.newProxyInstance(RegisteredServer.class.getClassLoader(),new Class<?>[]{RegisteredServer.class},(p,m,a)->m.getName().equals("getServerInfo")?info:null);
@@ -43,7 +47,7 @@ class VirtualQueueFlowTest {
                 if(m.getName().equals("spawnPlayer")){handler=(LimboSessionHandler)a[1];handler.onSpawn((Limbo)p,virtual);}return null;
             });
             plugin=new BlinkQueue(proxy,null,Path.of("."));
-            set("ready",true);set("config",QueueConfig.read(new Properties()));set("capacity",new Semaphore(2));set("network",new NetworkBridge(routes));set("limbo",limbo);
+            set("ready",true);set("config",QueueConfig.read(new Properties()));set("capacity",new Semaphore(2));set("network",new NetworkBridge(routes));set("limbo",limbo);set("restartLimbo",limbo);
             this.player=player;
         }
         final Player player;
@@ -62,7 +66,17 @@ class VirtualQueueFlowTest {
         assertEquals(List.of("BlinkSMP-Overworld-02"),h.lookups);assertEquals(1,h.worldConnections.get());assertEquals(0,h.kicks.get());assertTrue(h.plugin.isHeld(h.player));
     }
     @Test void hiddenLeaveWorksThroughLimboCallbackWithoutRegisteringCommand()throws Exception{
-        Harness h=new Harness();h.plugin.holdForQueue(h.player);h.handler.onChat("/server");assertEquals(0,h.routes.leaves.get());h.handler.onChat("/LEAVE");assertEquals(1,h.routes.leaves.get());assertTrue(h.plugin.isHeld(h.player));
+        Harness h=new Harness();h.routes.mode="restart";h.plugin.holdForQueue(h.player);h.handler.onChat("/server");assertEquals(0,h.routes.leaves.get());h.handler.onChat("/LEAVE");assertEquals(1,h.routes.leaves.get());assertTrue(h.plugin.isHeld(h.player));
+    }
+    @Test void joinQueueNeverAdvertisesOrAcceptsLeave()throws Exception{
+        Harness h=new Harness();h.plugin.holdForQueue(h.player);h.handler.onChat("/leave");h.tick();
+        assertEquals(0,h.routes.leaves.get());assertTrue(h.messages.stream().noneMatch(m->m.contains("/leave")));assertTrue(h.messages.stream().anyMatch(m->m.contains("Join Queue")));
+    }
+    @Test void restartQueueExplainsOriginalLocationAndLeaveBecomesJoinIntent()throws Exception{
+        Harness h=new Harness();h.routes.mode="restart";h.plugin.holdForQueue(h.player);
+        assertTrue(h.messages.stream().anyMatch(m->m.contains("original location")));assertTrue(h.messages.stream().anyMatch(m->m.contains("/leave")));
+        h.handler.onChat("/leave");assertEquals("join",h.routes.mode);h.messages.clear();h.tick();
+        assertTrue(h.messages.stream().noneMatch(m->m.contains("/leave")));h.handler.onChat("/leave");assertEquals(1,h.routes.leaves.get());
     }
     @Test void disconnectBeforeRouteCompletesCannotMoveOrKickPlayer()throws Exception{
         Harness h=new Harness();CompletableFuture<String> pending=new CompletableFuture<>();h.routes.next=pending;h.plugin.holdForQueue(h.player);h.remove();pending.complete("BlinkSMP-Overworld-02");

@@ -37,7 +37,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private TerritoryBorderParticles particleBorders;
     private static final class Session {
         final UUID token=UUID.randomUUID();volatile byte[] data;
-        volatile boolean frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
+        volatile boolean initialJoinRtp,frozen=true,loaded,saving,transferring,closed,joined,profileRefreshing;
         volatile UUID ticket;volatile String transferTarget;volatile long freezeAt=System.currentTimeMillis();
         Location lastOwned;boolean borderQueued,navigationQueued;long automaticAfter,navigationAfter;final SwitchReplayGuard switchRequests=new SwitchReplayGuard();
         volatile Map<String,NetworkStore.Module> incomingModules=Map.of();
@@ -184,7 +184,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 if(s.data==null){
                     if(!worlds.containsValue(p.getWorld()))throw new IllegalStateException("Import player is outside configured worlds");
                     Region r=Region.at(dimension(p.getWorld()),p.getX(),p.getZ());if(!id.equals(regions.get(r)))throw new IllegalStateException("Import spawn region must be assigned to this server");
-                    s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();s.loaded=true;checkpointInitial(p,s);return;
+                    s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();s.loaded=true;checkpointInitial(p,s);initialJoinRtp(p,s);return;
                 }
                 PlayerSnapshot snapshot=PlayerSnapshot.decode(s.data);
                 World arrival=Objects.requireNonNull(worlds.get(snapshot.dimension()),"Destination world missing");
@@ -579,6 +579,16 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             travelOverworld(player,request.target(),true);
         }catch(Exception ignored){} // Unauthenticated or replayed client messages never initiate a transfer.
     }
+    private void initialJoinRtp(Player player,Session session){
+        session.initialJoinRtp=true;
+        new org.bukkit.scheduler.BukkitRunnable(){int attempts;
+            public void run(){
+                if(!player.isOnline()||sessions.get(player.getUniqueId())!=session||!session.initialJoinRtp){cancel();return;}
+                if(++attempts>60){session.initialJoinRtp=false;player.sendMessage("First-join RTP is not ready yet. Use /overworld when a safe landing is available.");cancel();return;}
+                if(!blocked(player)&&!session.transferring&&!session.saving)travelOverworld(player,id,true);
+            }
+        }.runTaskTimer(this,20,40);
+    }
     private void travelOverworld(Player player,String target,boolean exactServer){
         Session session=sessions.get(player.getUniqueId());
         if(!active||session==null||!session.loaded||blocked(player)){player.sendMessage("Your network data is still loading.");return;}
@@ -601,7 +611,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                         if(normal==null){player.sendMessage("This server has no configured Overworld.");return;}
                         normal.getChunkAtAsync(dest,true).thenAccept(chunk->main(()->{
                             if(!player.isOnline()||sessions.get(player.getUniqueId())!=session||blocked(player)||session.transferring)return;
-                            try{Location safe=safePortalLanding(dest);if(!player.teleport(safe,PlayerTeleportEvent.TeleportCause.PLUGIN))player.sendMessage("Overworld travel was cancelled.");}
+                            try{Location safe=safePortalLanding(dest);if(!player.teleport(safe,PlayerTeleportEvent.TeleportCause.PLUGIN))player.sendMessage("Overworld travel was cancelled.");else session.initialJoinRtp=false;}
                             catch(Exception ex){player.sendMessage("That Overworld landing changed. Try again shortly.");}
                         }));
                     }else transfer(player,session,point.server(),"Overworld",dest,null,true);
@@ -684,7 +694,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             if(args.length!=1){sender.sendMessage("Usage: /blinkserver <server-ID>");return true;}
             try{Region.dimensionOf(args[0]);travelOverworld(player,args[0],true);}catch(Exception ex){sender.sendMessage("Use a registered BlinkSMP gameplay server ID.");}return true;
         }
-        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.5.1: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
+        if(args.length==0||args[0].equalsIgnoreCase("status")){sender.sendMessage("BlinkNetwork 0.5.2: "+(ready?"ready":active?"BLOCKED — check configuration/database":"disabled")+"; ID="+id+"; regions="+regions.size());return true;}
         if(!(sender instanceof ConsoleCommandSender)){sender.sendMessage("Setup commands are console-only.");return true;}
         if(db==null){sender.sendMessage("Configure the database and enabled: true, then restart first.");return true;}
         if(args[0].equalsIgnoreCase("restart")){try{scheduleRestart(args.length>1?Integer.parseInt(args[1]):10);sender.sendMessage("Restart scheduled; new arrivals blocked.");}catch(Exception ex){sender.sendMessage("Usage: blinknet restart <10..86400 seconds>");}return true;}

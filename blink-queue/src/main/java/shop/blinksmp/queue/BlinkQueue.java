@@ -27,8 +27,9 @@ import java.util.concurrent.atomic.*;
 public final class BlinkQueue {
     private final ProxyServer proxy;private final Logger log;private final Path directory;
     private final Map<UUID,Attempt> attempts=new ConcurrentHashMap<>();
+    private final Set<UUID> joinInitialized=ConcurrentHashMap.newKeySet();
     private volatile boolean ready;
-    private QueueConfig config;private NetworkBridge network;private Limbo limbo;
+    private QueueConfig config;private NetworkBridge network;private Limbo limbo,restartLimbo;
     private ScheduledTask timer;private Semaphore capacity;
     private static final class Attempt {
         final Player player;final WaitBudget budget;
@@ -46,15 +47,12 @@ public final class BlinkQueue {
             config=QueueConfig.read(p);if(!config.enabled()){log.info("BlinkQueue disabled.");return;}
             network=new NetworkBridge(proxy.getPluginManager().getPlugin("blinknetwork").flatMap(PluginContainer::getInstance).orElseThrow());
             LimboFactory factory=(LimboFactory)proxy.getPluginManager().getPlugin("limboapi").flatMap(PluginContainer::getInstance).orElseThrow();
-            var world=factory.createVirtualWorld(Dimension.OVERWORLD,0.5,65,0.5,0,0);
-            var block=factory.createSimpleBlock("minecraft:glass");for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)world.setBlock(x,64,z,block);
-            world.fillSkyLight(15);
-            limbo=factory.createLimbo(world).setName("UltimateSMP Virtual Queue").setGameMode(GameMode.ADVENTURE)
-                .setWorldTime(6000).setViewDistance(2).setSimulationDistance(2).setReadTimeout(30_000).setShouldRejoin(true).setShouldRespawn(true);
+            limbo=createRoom(factory,"UltimateSMP Join Queue","minecraft:light_gray_stained_glass");
+            restartLimbo=createRoom(factory,"UltimateSMP Restart Queue","minecraft:light_blue_stained_glass");
             capacity=new Semaphore(config.capacity());ready=true;
             timer=proxy.getScheduler().buildTask(this,this::tick).repeat(Duration.ofSeconds(config.pollSeconds())).schedule();
             log.info("BlinkQueue virtual queue ready; no queue backend/API required; wait limit {} seconds.",config.waitSeconds());
-        }catch(Exception|LinkageError ex){ready=false;log.error("BlinkQueue setup failed ({}). Requires Java 25, LimboAPI 1.2.0 and BlinkNetwork 0.4.0+.",ex.getClass().getSimpleName());}
+        }catch(Exception|LinkageError ex){ready=false;log.error("BlinkQueue setup failed ({}). Requires Java 25, LimboAPI 1.2.0 and BlinkNetwork 0.5.2+.",ex.getClass().getSimpleName());}
     }
     @Subscribe(order=PostOrder.LAST) public void login(LoginLimboRegisterEvent event){
         if(!ready)return;
@@ -67,8 +65,19 @@ public final class BlinkQueue {
             if(!network.recover(kick.getPlayer(),origin))return false;
             return holdForQueue(kick.getPlayer());
         });
-        event.addOnJoinCallback(()->enter(event.getPlayer()));
+        event.addOnJoinCallback(()->{
+            UUID id=event.getPlayer().getUniqueId();
+            if(joinInitialized.add(id)&&!network.beginJoin(id)){joinInitialized.remove(id);event.getPlayer().disconnect(Component.text("The network queue is not available. Please retry shortly."));return;}
+            enter(event.getPlayer());
+        });
     }
+    private Limbo createRoom(LimboFactory factory,String name,String material){
+        var world=factory.createVirtualWorld(Dimension.OVERWORLD,0.5,65,0.5,0,0);var block=factory.createSimpleBlock(material);
+        for(int x=-3;x<=3;x++)for(int z=-3;z<=3;z++)world.setBlock(x,64,z,block);world.fillSkyLight(15);
+        return factory.createLimbo(world).setName(name).setGameMode(GameMode.ADVENTURE).setWorldTime(6000).setViewDistance(2).setSimulationDistance(2).setReadTimeout(30_000).setShouldRejoin(true).setShouldRespawn(true);
+    }
+    private boolean restart(Attempt a){return network.mode(a.player.getUniqueId()).equals("restart");}
+    private boolean canLeave(Attempt a){return restart(a)&&network.canLeave(a.player.getUniqueId());}
     public boolean isReady(){return ready;}
     /** Remains true during admission so BlinkNetwork can validate the exact reserved world. */
     public boolean isHeld(Player player){return ready&&attempts.containsKey(player.getUniqueId());}
@@ -87,22 +96,22 @@ public final class BlinkQueue {
     }
     private void spawn(Attempt a){
         if(!a.spawning.compareAndSet(false,true))return;
-        try{limbo.spawnPlayer(a.player,new LimboSessionHandler(){
+        try{(restart(a)?restartLimbo:limbo).spawnPlayer(a.player,new LimboSessionHandler(){
             private LimboPlayer own;
             @Override public void onSpawn(Limbo server,LimboPlayer player){
                 a.spawning.set(false);if(!ready||attempts.get(a.player.getUniqueId())!=a)return;
                 own=player;a.virtual=player;player.disableFalling();
-                a.player.sendMessage(Component.text("You are in the virtual queue. /leave requests safe RTP to a different world server."));
+                a.player.sendMessage(Component.text(restart(a)?"Your server is restarting. Your original location is saved. Wait to return, or use /leave to RTP on a different server.":"Welcome to the UltimateSMP Join Queue. Waiting for a safe Overworld RTP landing..."));
                 show(a);resolve(a);
             }
             @Override public void onMove(double x,double y,double z){if(a.virtual==own&&own!=null&&(y<64||y>72||Math.abs(x)>4||Math.abs(z)>4))own.teleport(0.5,65,0.5,0,0);}
             @Override public void onChat(String message){
                 // Not registered in Velocity/Brigadier: absent from TAB and autocomplete.
-                if(FailurePolicy.leave(message)&&a.virtual==own&&!a.departing&&a.leaving.compareAndSet(false,true)){
+                if(FailurePolicy.leave(message)&&canLeave(a)&&a.virtual==own&&!a.departing&&a.leaving.compareAndSet(false,true)){
                     a.revision.incrementAndGet();
                     network.leave(a.player.getUniqueId()).orTimeout(12,TimeUnit.SECONDS).whenComplete((accepted,error)->{
                         a.leaving.set(false);if(attempts.get(a.player.getUniqueId())!=a)return;
-                        a.player.sendMessage(Component.text(error==null&&Boolean.TRUE.equals(accepted)?"Looking for a safe landing on another server...":"Your data must finish loading, or your first join must use the main server."));
+                        a.player.sendMessage(Component.text(error==null&&Boolean.TRUE.equals(accepted)?"Looking for a safe landing on another server...":"Leaving is only available while waiting for the server you were on to restart."));
                         resolve(a);
                     });
                 }
@@ -111,8 +120,9 @@ public final class BlinkQueue {
         });}catch(Exception|LinkageError ex){fail(a,"The virtual queue could not load. Please reconnect later.");log.warn("Virtual queue spawn failed ({}).",ex.getClass().getSimpleName());}
     }
     private void show(Attempt a){
-        a.player.sendActionBar(Component.text("Waiting for a safe world... /leave for another server — "+a.budget.secondsLeft(System.nanoTime())+"s"));
-        a.player.showTitle(Title.title(Component.text("UltimateSMP Queue"),Component.text("Waiting for an available world..."),Title.Times.times(Duration.ZERO,Duration.ofSeconds(config.pollSeconds()+1),Duration.ZERO)));
+        boolean restart=restart(a);String action=restart?"Waiting to restore your original location":"Waiting for safe Overworld RTP";
+        a.player.sendActionBar(Component.text(action+(canLeave(a)?" · /leave to RTP elsewhere":"")+" — "+a.budget.secondsLeft(System.nanoTime())+"s"));
+        a.player.showTitle(Title.title(Component.text(restart?"UltimateSMP Restart Queue":"UltimateSMP Join Queue"),Component.text(restart?"Returning to your saved location when ready":"Finding an available world..."),Title.Times.times(Duration.ZERO,Duration.ofSeconds(config.pollSeconds()+1),Duration.ZERO)));
     }
     private void resolve(Attempt a){
         if(!ready||a.departing||a.leaving.get()||a.virtual==null||attempts.get(a.player.getUniqueId())!=a||!a.routing.compareAndSet(false,true))return;
@@ -138,9 +148,9 @@ public final class BlinkQueue {
         }
     }
     @Subscribe public void connected(ServerConnectedEvent event){Attempt a=attempts.get(event.getPlayer().getUniqueId());if(a!=null)remove(a);}
-    @Subscribe public void disconnected(DisconnectEvent event){Attempt a=attempts.get(event.getPlayer().getUniqueId());if(a!=null)remove(a);}
+    @Subscribe public void disconnected(DisconnectEvent event){joinInitialized.remove(event.getPlayer().getUniqueId());Attempt a=attempts.get(event.getPlayer().getUniqueId());if(a!=null)remove(a);}
     private boolean remove(Attempt a){if(attempts.remove(a.player.getUniqueId(),a)){capacity.release();return true;}return false;}
     private void fail(Attempt a,String message){if(remove(a))a.player.disconnect(Component.text(message));}
-    @Subscribe public void stop(ProxyShutdownEvent event){ready=false;if(timer!=null)timer.cancel();for(Attempt a:attempts.values())fail(a,"The proxy is restarting. Please reconnect shortly.");if(limbo!=null)limbo.dispose();}
+    @Subscribe public void stop(ProxyShutdownEvent event){ready=false;joinInitialized.clear();if(timer!=null)timer.cancel();for(Attempt a:attempts.values())fail(a,"The proxy is restarting. Please reconnect shortly.");if(limbo!=null)limbo.dispose();if(restartLimbo!=null&&restartLimbo!=limbo)restartLimbo.dispose();}
 }
 
