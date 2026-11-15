@@ -57,3 +57,4 @@ public final class PrivateMessagesTest {
         System.out.println("PASS: real preprocess cancellation, safe rewrites, original sender and dispatch isolation");
     }
 }
+

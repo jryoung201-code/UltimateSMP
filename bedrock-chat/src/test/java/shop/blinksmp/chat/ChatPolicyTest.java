@@ -22,3 +22,4 @@ public final class ChatPolicyTest {
         System.out.println("PASS: "+checks+" validation, command rejection and rate-limit checks");
     }
 }
+

@@ -39,7 +39,7 @@ public final class ChatBootstrap extends JavaPlugin implements Listener {
         } catch(ReflectiveOperationException|RuntimeException|LinkageError ex) {
             status="RELAY UNAVAILABLE — check console";
             if(relay!=null) { try { relay.stop(); } catch(RuntimeException|LinkageError ignored) {} relay=null; }
-            getLogger().severe("Could not start Bedrock chat relay: "+ex);
+            getLogger().severe("Could not start universal chat relay: "+ex);
         }
     }
     private boolean install(String label,String resource,String manifestName,AdminInstaller.Spec spec) {
@@ -56,16 +56,17 @@ public final class ChatBootstrap extends JavaPlugin implements Listener {
         }
     }
     @EventHandler public void dependencyDisabled(PluginDisableEvent event) {
-        if(relay!=null && (event.getPlugin().getName().equals("packetevents")||event.getPlugin().getName().equals("floodgate"))) {
+        if(relay!=null && (event.getPlugin().getName().equals("packetevents"))) {
             try { relay.stop(); } finally { relay=null; status="DEPENDENCY DISABLED — restart to restore chat relay"; }
         }
     }
     @Override public void onDisable() { if(relay!=null) { relay.stop(); relay=null; } }
     @Override public boolean onCommand(CommandSender sender,Command cmd,String label,String[] args) {
         if(!sender.hasPermission("ultimatebedrockchat.admin")) { sender.sendMessage("You do not have permission."); return true; }
-        sender.sendMessage("UltimateBedrockChat 1.0.4 | "+status);
+        sender.sendMessage("UltimateBedrockChat 1.1.0 | "+status);
         if(relay!=null) relay.status(sender);
         return true;
     }
 }
+
 

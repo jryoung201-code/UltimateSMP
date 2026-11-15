@@ -35,3 +35,4 @@ public final class BootstrapLoadTest {
         System.out.println("PASS: real bootstrap loads and resolves without PacketEvents classes");
     }
 }
+

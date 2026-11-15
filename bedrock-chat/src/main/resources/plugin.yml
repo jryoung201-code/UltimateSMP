@@ -1,17 +1,18 @@
 name: UltimateBedrockChat
-version: 1.0.4
+version: 1.1.0
 main: shop.blinksmp.chat.ChatBootstrap
 api-version: '1.21.11'
-description: Bedrock chat relay; auto-installs PacketEvents and UltimateGUI for UUID bd33980d-5b8d-4f1c-becc-0520f92c4a0d.
+description: Java and Bedrock chat with Paper moderation and Velocity public-chat relay.
 author: Aven
-depend: [floodgate]
-softdepend: [packetevents, Geyser-Spigot, UltimateRanks]
+softdepend: [packetevents, floodgate, Geyser-Spigot, UltimateRanks, UltimateSettings]
 commands:
   bedrockchat:
-    description: Show Bedrock chat relay status
+    aliases: [ultimatechat]
+    description: Show Java, Bedrock and network chat relay status
     permission: ultimatebedrockchat.admin
     usage: /<command>
 permissions:
   ultimatebedrockchat.admin:
     default: op
+
 

@@ -22,3 +22,4 @@ public final class PrivateMessages {
         return Bukkit.dispatchCommand(sender,valid);
     }
 }
+

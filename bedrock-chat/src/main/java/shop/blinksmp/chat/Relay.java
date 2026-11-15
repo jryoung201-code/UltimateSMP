@@ -8,3 +8,4 @@ public interface Relay {
     void stop();
     void status(CommandSender sender);
 }
+

@@ -1,0 +1,14 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>shop.blinksmp</groupId><artifactId>UltimateChat-Velocity</artifactId><version>1.1.0</version>
+  <properties><maven.compiler.release>21</maven.compiler.release><project.build.sourceEncoding>UTF-8</project.build.sourceEncoding></properties>
+  <repositories><repository><id>papermc</id><url>https://repo.papermc.io/repository/maven-public/</url></repository></repositories>
+  <dependencies>
+    <dependency><groupId>com.velocitypowered</groupId><artifactId>velocity-api</artifactId><version>3.4.0-SNAPSHOT</version><scope>provided</scope></dependency>
+    <dependency><groupId>net.kyori</groupId><artifactId>adventure-text-serializer-gson</artifactId><version>4.21.0</version><scope>provided</scope></dependency>
+  </dependencies>
+  <build><plugins>
+    <plugin><groupId>org.codehaus.mojo</groupId><artifactId>build-helper-maven-plugin</artifactId><version>3.6.0</version><executions><execution><id>shared-protocol</id><phase>generate-sources</phase><goals><goal>add-source</goal></goals><configuration><sources><source>../bedrock-chat/src/main/java/shop/blinksmp/chat/bridge</source></sources></configuration></execution></executions></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.14.1</version><configuration><annotationProcessorPaths><path><groupId>com.velocitypowered</groupId><artifactId>velocity-api</artifactId><version>3.4.0-SNAPSHOT</version></path></annotationProcessorPaths></configuration></plugin>
+  </plugins></build>
+</project>
