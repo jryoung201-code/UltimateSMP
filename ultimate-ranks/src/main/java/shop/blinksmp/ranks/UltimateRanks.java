@@ -108,8 +108,41 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             for(Player p:Bukkit.getOnlinePlayers()) refresh(p);
         }
     }
-    private Rank rank(CommandSender sender) { return sender instanceof Player p ? rank(p.getUniqueId()) : Rank.OWNER; }
-    private boolean console(CommandSender s) { return s instanceof ConsoleCommandSender || s instanceof RemoteConsoleCommandSender; }
+    private record NetworkActor(UUID id,String name,Rank rank) {}
+    private final ThreadLocal<NetworkActor> networkActor=new ThreadLocal<>();
+    public String getNetworkAuthority(UUID id){return rank(id).name();}
+    public boolean isNetworkMuted(UUID id){var e=store.get(id);return e.mute()!=null&&e.mute().active(System.currentTimeMillis());}
+    public boolean isNetworkFrozen(UUID id){return frozen.containsKey(id);}
+    public void setNetworkVanish(Player p,boolean enabled){
+        if(!Bukkit.isPrimaryThread())throw new IllegalStateException("Primary thread required");
+        if(!Rules.allowed(rank(p.getUniqueId()),"vanish"))throw new IllegalArgumentException("Staff rank required");
+        setVanish(p,enabled);
+    }
+    /** Trusted server-plugin API. Executes the existing rank/hierarchy/duration checks, never as console. */
+    public void executeNetworkStaff(UUID actor,String name,String authority,String action,String[] args,java.util.function.Consumer<String> reply){
+        if(!Bukkit.isPrimaryThread()||networkActor.get()!=null)throw new IllegalStateException("Invalid remote context");
+        if(!Set.of("rank","warn","warnings","kick","mute","unmute","ban","tempban","unban","freeze","heal","feed").contains(action))throw new IllegalArgumentException("Unsupported remote action");
+        Rank role=Rank.valueOf(authority);if(!Rules.allowed(role,action))throw new IllegalArgumentException("Staff rank cannot use this action");
+        if(args.length<1||args.length>12)throw new IllegalArgumentException("Invalid staff arguments");
+        CommandSender sender=(CommandSender)java.lang.reflect.Proxy.newProxyInstance(CommandSender.class.getClassLoader(),new Class[]{CommandSender.class},(proxy,method,values)->{
+            switch(method.getName()){
+                case "getName": return name;
+                case "getServer": return Bukkit.getServer();
+                case "isOp": return false;
+                case "hasPermission","isPermissionSet": return false;
+                case "sendMessage","sendPlainMessage","sendRichMessage":
+                    if(values!=null)for(Object v:values){if(v instanceof String text)reply.accept(text);else if(v instanceof String[] texts)for(String text:texts)reply.accept(text);else if(v instanceof Component component)reply.accept(net.kyori.adventure.text.serializer.plain.PlainTextComponentSerializer.plainText().serialize(component));}return null;
+                case "toString": return "NetworkStaff["+name+"]";
+                case "hashCode": return System.identityHashCode(proxy);
+                case "equals": return proxy==values[0];
+                default: if(method.getReturnType()==void.class)return null;throw new UnsupportedOperationException(method.getName());
+            }
+        });
+        networkActor.set(new NetworkActor(actor,name,role));
+        try{onCommand(sender,Objects.requireNonNull(getCommand(action)),action,args);}finally{networkActor.remove();}
+    }
+    private Rank rank(CommandSender sender) { return networkActor.get()!=null?networkActor.get().rank():sender instanceof Player p ? rank(p.getUniqueId()) : Rank.OWNER; }
+    private boolean console(CommandSender s) { return networkActor.get()==null&&(s instanceof ConsoleCommandSender || s instanceof RemoteConsoleCommandSender); }
     private void require(boolean condition,String error) { if(!condition) throw new IllegalArgumentException(error); }
     private void say(CommandSender to,String text) { to.sendMessage(LEGACY.deserialize("&8[&bUltimate&8] &r"+text)); }
     private void audit(CommandSender actor,String action) {
@@ -285,7 +318,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
 
     @Override public boolean onCommand(CommandSender s,Command cmd,String label,String[] original) {
         try {
-            require(console(s) || s instanceof Player,"Only players and server console can run staff commands.");
+            require(console(s) || s instanceof Player || networkActor.get()!=null,"Only players and server console can run staff commands.");
             String action=cmd.getName().toLowerCase(Locale.ROOT); String[] args=original;
             if(action.equals("rank")) { ranks(s,args); return true; }
             if(action.equals("staff")) {
@@ -517,5 +550,6 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         return candidates.stream().filter(v->v.toLowerCase(Locale.ROOT).startsWith(partial)).sorted().toList();
     }
 }
+
 
 
