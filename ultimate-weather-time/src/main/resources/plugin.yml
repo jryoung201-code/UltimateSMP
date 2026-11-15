@@ -1,0 +1,7 @@
+name: UltimateWeatherTime
+version: 1.0.0
+main: shop.ultimatesmp.weather.UltimateWeatherTime
+api-version: '1.21.11'
+depend: [BlinkNetwork]
+author: Aven
+description: Shared per-dimension time and weather using BlinkNetwork's existing database settings.
