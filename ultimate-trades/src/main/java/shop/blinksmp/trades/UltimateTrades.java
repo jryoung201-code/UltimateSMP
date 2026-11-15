@@ -122,6 +122,8 @@ public final class UltimateTrades extends JavaPlugin implements Listener,TabComp
         cooldowns.put(id,now);requests.put(id,new Request(id,target.getUniqueId(),now+requestSeconds*1_000_000_000L));
         say(p,"Request sent to "+target.getName()+" for "+requestSeconds+" seconds.");say(target,p.getName()+" wants to trade! /trade accept "+p.getName()+" or /trade deny "+p.getName());return true;
     }
+    public boolean networkRequestsEnabled(UUID id){return !disabled.contains(id);}
+    public void setNetworkRequestsEnabled(UUID id,boolean enabled){if(enabled)disabled.remove(id);else{disabled.add(id);removeRequests(id);}}
     public boolean canNetworkTrade(UUID id){Player p=Bukkit.getPlayer(id);return p!=null&&unavailable(p,true)==null;}
     public void openNetworkTrade(Player a,Player b){
         if(!Bukkit.isPrimaryThread())throw new IllegalStateException("Primary thread required");

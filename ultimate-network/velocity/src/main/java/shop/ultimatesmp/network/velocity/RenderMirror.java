@@ -3,7 +3,7 @@ import java.net.*;import java.net.http.*;import java.time.Duration;import java.u
 /** Optional HTTPS status mirror. Never on the teleport, consent or inventory transaction path. */
 final class RenderMirror {
  private final HttpClient client=HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(3)).followRedirects(HttpClient.Redirect.NEVER).build();
- private final URI endpoint;private final String token;private final Logger log;private final AtomicBoolean busy=new AtomicBoolean();private String previous="";
+ private final URI endpoint;private final String token;private final Logger log;private final AtomicBoolean busy=new AtomicBoolean();private volatile String previous="";
  RenderMirror(Logger log){this.log=log;token=System.getenv().getOrDefault("ULTIMATE_NETWORK_RENDER_TOKEN","");String url=System.getenv().getOrDefault("ULTIMATE_NETWORK_RENDER_URL","");URI parsed=null;
   if(!url.isBlank()&&!token.isBlank())try{URI u=URI.create(url);if(!"https".equals(u.getScheme())||u.getHost()==null||u.getUserInfo()!=null||u.getFragment()!=null)throw new IllegalArgumentException();parsed=u;}catch(Exception ex){log.warn("Render mirror URL must be HTTPS without embedded credentials");}endpoint=parsed;
  }
