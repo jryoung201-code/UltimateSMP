@@ -22,3 +22,4 @@ public final class PrivateMessagePolicyTest {
         System.out.println("PASS: "+(checks+2)+" private-message alias, target, command-isolation and text validation checks");
     }
 }
+

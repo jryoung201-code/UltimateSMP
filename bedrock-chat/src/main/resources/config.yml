@@ -8,3 +8,9 @@ auto-install-admin: true
 # Copies official PacketEvents 2.14.0 if missing, or stages an older installed copy.
 # Restart once after installation. No runtime network download.
 auto-install-packetevents: true
+
+
+# Install UltimateChat-Velocity-1.1.0.jar on Velocity for remote public-chat delivery.
+# Restricted/private chat audiences are kept local. No database or shared secret is used.
+proxy-chat:
+  enabled: true

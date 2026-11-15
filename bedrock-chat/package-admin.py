@@ -41,3 +41,4 @@ with zipfile.ZipFile(packets) as jar:
 )
 print("Embedded official PacketEvents 2.14.0 with verified release checksum")
 
+

@@ -1,9 +1,9 @@
 name: Build UltimateBedrockChat
 on:
   push:
-    paths: ['bedrock-chat/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
+    paths: ['bedrock-chat/**', 'chat-proxy/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
   pull_request:
-    paths: ['bedrock-chat/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
+    paths: ['bedrock-chat/**', 'chat-proxy/**', 'ultimate-gui/**', '.github/workflows/bedrock-chat.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -39,9 +39,17 @@ jobs:
           java -cp target/classes:target/test-classes shop.blinksmp.chat.AdminInstallerTest
           java -cp target/classes:target/test-classes shop.blinksmp.chat.BundledInstallTest
           java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.chat.BootstrapLoadTest
+      - name: Verify bridge protocol and build Velocity companion
+        run: |
+          java -cp target/classes:target/test-classes shop.blinksmp.chat.BridgeTest
+          java -cp "target/classes:target/test-classes:$(cat target/test-classpath)" shop.blinksmp.chat.NetworkChatTest
+          mvn --batch-mode --no-transfer-progress -f ../chat-proxy/pom.xml package
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateBedrockChat-1.0.4
-          path: bedrock-chat/target/UltimateBedrockChat-1.0.4.jar
+          name: UltimateBedrockChat-1.1.0
+          path: |
+            bedrock-chat/target/UltimateBedrockChat-1.1.0.jar
+            chat-proxy/target/UltimateChat-Velocity-1.1.0.jar
           if-no-files-found: error
+
 

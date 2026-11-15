@@ -6,7 +6,6 @@ import com.github.retrooper.packetevents.protocol.packettype.PacketType;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatMessage;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommand;
 import com.github.retrooper.packetevents.wrapper.play.client.WrapperPlayClientChatCommandUnsigned;
-import java.lang.reflect.Method;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.*;
@@ -15,10 +14,9 @@ import org.bukkit.command.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
 import org.bukkit.event.player.*;
-import org.bukkit.plugin.Plugin;
 import org.bukkit.plugin.java.JavaPlugin;
 
-/** Only verified Floodgate sessions are relayed. Java chat and authentication are untouched. */
+/** Java and Bedrock chat share the unsigned Paper event pipeline. */
 public final class ChatRelay implements Relay, Listener {
     private final JavaPlugin plugin;
     public ChatRelay(JavaPlugin plugin) { this.plugin=plugin; }
@@ -27,22 +25,12 @@ public final class ChatRelay implements Relay, Listener {
     private final LongAdder intercepted=new LongAdder(),dispatched=new LongAdder(),rejected=new LongAdder();
     private final LongAdder privateDispatched=new LongAdder();
     private PacketListenerAbstract listener;
-    private Object floodgateApi;
-    private Method isFloodgatePlayer;
+    private NetworkChat network;
     private long intervalNanos;
 
     @Override public void start() {
         intervalNanos=Math.max(250,Math.min(10000,plugin.getConfig().getInt("minimum-message-interval-ms",750)))*1_000_000L;
-        try {
-            Plugin floodgate=Objects.requireNonNull(Bukkit.getPluginManager().getPlugin("floodgate"));
-            Class<?> api=Class.forName("org.geysermc.floodgate.api.FloodgateApi",true,floodgate.getClass().getClassLoader());
-            floodgateApi=api.getMethod("getInstance").invoke(null);
-            isFloodgatePlayer=api.getMethod("isFloodgatePlayer",UUID.class);
-            if(floodgateApi==null) throw new IllegalStateException("Floodgate API is not ready");
-        } catch(ReflectiveOperationException|RuntimeException ex) {
-            plugin.getLogger().severe("Cannot verify Floodgate identities; relay disabled: "+ex);
-            throw new IllegalStateException("Cannot verify Floodgate identities",ex);
-        }
+        network=new NetworkChat(plugin);network.start();
         Bukkit.getPluginManager().registerEvents(this,plugin);
         for(Player p:Bukkit.getOnlinePlayers()) register(p);
         listener=new PacketListenerAbstract(PacketListenerPriority.HIGHEST) {
@@ -51,7 +39,7 @@ public final class ChatRelay implements Relay, Listener {
                 UUID id=event.getUser().getUUID();
                 if(id==null) return;
                 Session session=sessions.get(id);
-                if(session==null) return; // All Java players, including name/UUID lookalikes, keep the vanilla path.
+                if(session==null) return;
                 boolean command;
                 String raw;
                 try {
@@ -63,7 +51,7 @@ public final class ChatRelay implements Relay, Listener {
                         raw=new WrapperPlayClientChatCommandUnsigned(event).getCommand(); command=true;
                     } else return;
                 } catch(RuntimeException ex) { rejected.increment(); return; }
-                // Never intercept arbitrary commands, nor any command packet from a Java session.
+                // Only public chat and the existing private-message allowlist enter this relay.
                 if(command && !PrivateMessagePolicy.handles(raw)) return;
                 event.setCancelled(true);
                 intercepted.increment();
@@ -79,7 +67,7 @@ public final class ChatRelay implements Relay, Listener {
                                 else rejected.increment();
                             } else {
                                 // Normal chat events/formatters run. Public chat cannot execute commands.
-                                session.player().chat(message);
+                                network.chat(session.player(),message);
                                 dispatched.increment();
                             }
                         } finally { session.pending().decrementAndGet(); }
@@ -90,28 +78,27 @@ public final class ChatRelay implements Relay, Listener {
             }
         };
         PacketEvents.getAPI().getEventManager().registerListener(listener);
-        plugin.getLogger().info("Bedrock-only chat relay active. Java signatures and server.properties are unchanged.");
-        if(!Bukkit.getOnlineMode()) plugin.getLogger().warning("online-mode=false: Java account authentication is not enforced. This plugin does not change that setting.");
+        plugin.getLogger().info("Java and Bedrock chat relay active; public messages pass Paper filters and mutes before proxy forwarding.");
+        plugin.getLogger().info("Chat signing settings are not changed automatically. Keep Velocity account authentication and modern forwarding configured.");
     }
 
     private void register(Player p) {
-        try {
-            if(Boolean.TRUE.equals(isFloodgatePlayer.invoke(floodgateApi,p.getUniqueId())))
-                sessions.put(p.getUniqueId(),new Session(p,new ChatPolicy.Gate(intervalNanos),new AtomicInteger()));
-        } catch(ReflectiveOperationException ex) { plugin.getLogger().warning("Could not verify player for chat relay: "+ex); }
+        sessions.put(p.getUniqueId(),new Session(p,new ChatPolicy.Gate(intervalNanos),new AtomicInteger()));
     }
     @EventHandler(priority=EventPriority.MONITOR) public void join(PlayerJoinEvent e) { register(e.getPlayer()); }
     @EventHandler public void quit(PlayerQuitEvent e) { sessions.remove(e.getPlayer().getUniqueId()); }
     @Override public void stop() {
         HandlerList.unregisterAll(this);
+        if(network!=null)network.stop();
         sessions.clear();
         if(listener!=null) PacketEvents.getAPI().getEventManager().unregisterListener(listener);
     }
     @Override public void status(CommandSender sender) {
-        sender.sendMessage("UltimateBedrockChat 1.0.4 | verified Bedrock sessions: "+sessions.size());
+        sender.sendMessage("UltimateBedrockChat 1.1.0 | Java and Bedrock sessions: "+sessions.size());
         sender.sendMessage("Intercepted: "+intercepted.sum()+" | passed to Paper chat events: "+dispatched.sum()+" | invalid/rate-limited/stale: "+rejected.sum());
         sender.sendMessage("Private-message commands dispatched: "+privateDispatched.sum()+" | /msg, /tell, /w supported");
-        sender.sendMessage("Java messages are not relayed. Bedrock output is unsigned. Mute/filter events may cancel messages after dispatch.");
+        sender.sendMessage("Unsigned chat for both editions. Public frames sent to Velocity: "+network.forwarded()+". Install UltimateChat-Velocity on the proxy for cross-server delivery.");
     }
 }
+
 

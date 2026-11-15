@@ -27,3 +27,4 @@ public final class PrivateMessagePolicy {
         return input.substring(0,split).toLowerCase(Locale.ROOT)+" "+target+" "+message;
     }
 }
+

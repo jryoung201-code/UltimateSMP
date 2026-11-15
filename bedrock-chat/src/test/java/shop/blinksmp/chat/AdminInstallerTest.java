@@ -66,3 +66,4 @@ public final class AdminInstallerTest {
         } finally { try(var paths=Files.walk(root)) { for(Path p:paths.sorted(Comparator.reverseOrder()).toList()) Files.deleteIfExists(p); } }
     }
 }
+
