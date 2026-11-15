@@ -237,7 +237,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             try{anchor=sourceLocation(player,s).clone();}catch(Exception ex){result.complete(false);return result;}
             auxiliary.getChunkAtAsync(to,true).whenComplete((chunk,error)->main(()->{
                 if(error!=null||!player.isOnline()||sessions.get(player.getUniqueId())!=s||!isPlayerReady(player)){result.complete(false);return;}
-                try{Location landing=auxiliaryLanding(to);s.lastOwned=anchor;boolean moved=player.teleport(landing,PlayerTeleportEvent.TeleportCause.PLUGIN);if(moved)checkpoint(player,s);result.complete(moved);}catch(Exception ex){result.complete(false);}
+                try{Location landing=auxiliaryLanding(to);s.lastOwned=anchor;boolean moved=player.teleport(landing,PlayerTeleportEvent.TeleportCause.PLUGIN);if(moved){s.initialJoinRtp=false;checkpoint(player,s);}result.complete(moved);}catch(Exception ex){result.complete(false);}
             }));return result;
         }
         String issue=destinationIssue(target);if(issue!=null){player.sendMessage(issue);result.complete(false);return result;}
@@ -245,7 +245,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             try{NetworkStore.Rtp anchor=db.rtpPoints("").stream().filter(point->point.server().equals(target)).findFirst().orElse(null);
                 main(()->{if(anchor==null||!player.isOnline()||sessions.get(player.getUniqueId())!=s||!isPlayerReady(player)){result.complete(false);return;}
                     World local=worlds.get("Overworld");if(local==null){result.complete(false);return;}
-                    transfer(player,s,target,"Overworld",new Location(local,anchor.x(),anchor.y(),anchor.z(),yaw,pitch),null,false,desired);result.complete(s.transferring);
+                    transfer(player,s,target,"Overworld",new Location(local,anchor.x(),anchor.y(),anchor.z(),yaw,pitch),null,false,desired);if(s.transferring)s.initialJoinRtp=false;result.complete(s.transferring);
                 });
             }catch(Exception ex){result.complete(false);}
         });return result;

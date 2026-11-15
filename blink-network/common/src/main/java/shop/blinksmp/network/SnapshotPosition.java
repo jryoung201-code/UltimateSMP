@@ -12,7 +12,7 @@ public final class SnapshotPosition {
         Region.at(dimension,x,z);
         // Explicit rescue/RTP targets a gameplay world, so remove a previous auxiliary return marker.
         String original=new String(payload,StandardCharsets.UTF_8);
-        String text=String.join("\n",Arrays.stream(original.split("\n",-1)).filter(line->!line.matches("^auxiliary-(world|x|y|z|yaw|pitch):.*")).toList());
+        String text=String.join("\n",Arrays.stream(original.split("\n",-1)).filter(line->!(line.startsWith("auxiliary-world:")||line.startsWith("auxiliary-x:")||line.startsWith("auxiliary-y:")||line.startsWith("auxiliary-z:")||line.startsWith("auxiliary-yaw:")||line.startsWith("auxiliary-pitch:"))).toList());
         Map<String,String> replacements=Map.of("dimension",dimension,"x",Double.toString(x),"y",Double.toString(y),"z",Double.toString(z));
         Set<String> seen=new HashSet<>();String[] lines=text.split("\n",-1);
         for(int i=0;i<lines.length;i++) {
