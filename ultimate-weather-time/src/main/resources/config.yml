@@ -1,0 +1,7 @@
+# Reads JDBC credentials and world mappings directly from BlinkNetwork. No proxy JAR needed.
+# Blank uses BlinkNetwork bootstrap-server as the automatic time/weather source.
+source-server: ''
+# Sync each dimension to the matching dimension on the other servers, every two seconds.
+interval-ticks: 40
+# Explicit /time, /weather and plugin/sleep changes on followers are sent to the source.
+relay-explicit-changes: true

@@ -1,0 +1,9 @@
+# UltimateWeatherTime 1.0.0
+
+Install the same JAR on both Paper 1.21.11 backends and restart. Requires Java 21 and the existing configured BlinkNetwork plugin. It reads the shared MySQL/MariaDB JDBC URL, username/password, server ID, bootstrap server and dimension mappings from BlinkNetwork (the existing BLINK_NETWORK_* environment overrides are honored). No new proxy plugin or credentials file is needed.
+
+By default, BlinkNetwork's bootstrap server is the time/weather source. Each matching dimension follows its source counterpart every two seconds: Overworld to Overworld, Nether to Nether, End to End. Time progression and daylight/weather-cycle rules, rain/thunder states and timers are synchronized. Manual/plugin/sleep time skips and explicit weather changes on follower worlds are relayed to the source when the Paper API reports them. Normal follower weather cycles do not become authoritative. Requests expire after 30 seconds if the source stays unavailable. Brief pending-change grace prevents commands being immediately reverted before the source publishes them.
+
+Two isolated additive tables are created automatically. Player inventory, home, rank, region and login tables are untouched. Sync runs on a single asynchronous database connection; all world access stays on Paper's primary thread. If the database or source goes offline, worlds keep running normally and resynchronize when it returns. This links world time and weather, not per-player weather/time overrides or sleep percentages across servers.
+
+Optional config sets source-server, interval-ticks (20–200), and relay-explicit-changes. No commands are added. The JAR does not support PostgreSQL-only backends. Tests cover time prediction, stale snapshots, frozen daylight, MariaDB snapshots, per-dimension separation, explicit-change relay and acknowledgement after the source publishes.
