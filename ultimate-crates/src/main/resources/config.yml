@@ -1,0 +1,5 @@
+# auto: share definitions through BlinkNetwork's MySQL/MariaDB credentials when available.
+# local: definitions are saved in crates.yml. Bindings remain local to each backend.
+storage: auto
+# Automatic refresh of shared reward definitions; save conflicts never overwrite another editor.
+refresh-seconds: 10
