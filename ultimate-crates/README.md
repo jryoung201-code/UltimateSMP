@@ -29,7 +29,7 @@ Paper 1.21.11 / Java 21. Install the JAR in `plugins/` on both Paper backends an
 
 ## Players
 
-Left-click a registered crate to preview reward items and chances. Right-click to open with one matching key. If a complete reward will not fit, the key is kept and nothing is dropped. Inventory mutation is planned before applying it on the server thread. BlinkNetwork loading, saving and transfer sessions are checked before giving or claiming rewards. Crate opening has a one-second click cooldown. Crates are protected from normal container access, hoppers, piston movement, explosions and breaking; `/crates remove` unregisters them first.
+Left-click a registered crate to preview reward items and chances. Right-click to open with one matching key. Before drawing a reward, every possible reward is checked for available space. This prevents using a full inventory to filter unwanted outcomes. If any possible reward will not fit, the key is kept and nothing is dropped. Inventory mutation is planned before applying it on the server thread. BlinkNetwork loading, saving and transfer sessions are checked before giving or claiming rewards. Crate opening has a one-second click cooldown. Crates are protected from normal container access, hoppers, piston movement, explosions and breaking; `/crates remove` unregisters them first.
 
 ## Shared storage
 
