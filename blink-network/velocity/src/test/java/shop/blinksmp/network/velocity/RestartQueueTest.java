@@ -9,7 +9,7 @@ class RestartQueueTest {
   id=UUID.randomUUID();proxy=mock(ProxyServer.class);db=mock(NetworkStore.class);plugin=new BlinkNetworkProxy(proxy,mock(Logger.class),Path.of("."));set("db",db);set("ready",true);set("active",true);set("bootstrap",B);
   a=mock(RegisteredServer.class);b=mock(RegisteredServer.class);when(proxy.getServer(A)).thenReturn(Optional.of(a));when(proxy.getServer(B)).thenReturn(Optional.of(b));
   var route=new NetworkStore.Route("offline",A,null,null,null);when(db.route(id)).thenReturn(route);when(db.loginTarget(id,route)).thenReturn(A);
-  when(db.ready(A)).thenReturn(false);when(db.ready(B)).thenReturn(true);when(db.rtpPoints(anyString())).thenReturn(List.of(new NetworkStore.Rtp(B,"Overworld",10,70,20)));when(db.rerouteOffline(eq(id),any())).thenReturn(true);
+  when(db.hasSavedSnapshot(id)).thenReturn(true);when(db.ready(A)).thenReturn(false);when(db.ready(B)).thenReturn(true);when(db.rtpPoints(anyString())).thenReturn(List.of(new NetworkStore.Rtp(B,"Overworld",10,70,20)));when(db.rerouteOffline(eq(id),any())).thenReturn(true);
  }
  void set(String name,Object value)throws Exception{Field f=BlinkNetworkProxy.class.getDeclaredField(name);f.setAccessible(true);f.set(plugin,value);}
  Player inWorld(){Player p=mock(Player.class);ServerConnection source=mock(ServerConnection.class);when(p.getUniqueId()).thenReturn(id);when(p.isActive()).thenReturn(true);when(p.getCurrentServer()).thenReturn(Optional.of(source));when(source.getServerInfo()).thenReturn(new ServerInfo(A,new InetSocketAddress("127.0.0.1",25565)));return p;}
@@ -27,6 +27,9 @@ class RestartQueueTest {
   plugin.queueRecovery(inWorld(),A);assertTrue(plugin.queueLeave(id).get());assertEquals("join",plugin.queueMode(id));assertFalse(plugin.queueCanLeave(id));assertFalse(plugin.queueLeave(id).get());
   assertEquals(B,plugin.queueDestination(id).get());verify(db).rtpPoints(A);verify(db).rerouteOffline(eq(id),any());
  }
+ @Test void alreadyPlayingFailureRetainsRestartIntentEvenWhenVelocityClearsCurrentConnection(){Player p=inWorld();when(p.getCurrentServer()).thenReturn(Optional.empty());assertTrue(plugin.queueRecovery(p,A));assertEquals("restart",plugin.queueMode(id));assertTrue(plugin.queueCanLeave(id));}
+ @Test void emptyFirstProfileLoadsOriginalBootstrapBeforeAnyRtp()throws Exception{when(db.route(id)).thenReturn(new NetworkStore.Route("offline",B,null,null,null));when(db.hasSavedSnapshot(id)).thenReturn(false);plugin.queueBeginJoin(id);assertEquals(B,plugin.queueDestination(id).get());verify(db,never()).rtpPoints(anyString());verify(db,never()).rerouteOffline(any(),any());}
+ @Test void preparedRtpDoesNotChangeAgainOnEveryPoll()throws Exception{var route=db.route(id);when(db.loginTarget(id,route)).thenReturn(B);plugin.queueBeginJoin(id);assertEquals(B,plugin.queueDestination(id).get());assertEquals(B,plugin.queueDestination(id).get());verify(db,times(1)).rerouteOffline(eq(id),any());}
  @Test void joinConnectionFailureIsNotReclassifiedAsRestart(){plugin.queueBeginJoin(id);assertTrue(plugin.queueRecovery(inWorld(),A));assertEquals("join",plugin.queueMode(id));assertFalse(plugin.queueCanLeave(id));}
  @Test void activeSessionRemainsFencedBeforeEitherQueueCanReroute()throws Exception{when(db.route(id)).thenReturn(new NetworkStore.Route("active",A,A,null,null));when(db.releaseDeadSession(id)).thenReturn(false);plugin.queueBeginJoin(id);assertEquals("",plugin.queueDestination(id).get());verify(db,never()).rerouteOffline(any(),any());}
 }

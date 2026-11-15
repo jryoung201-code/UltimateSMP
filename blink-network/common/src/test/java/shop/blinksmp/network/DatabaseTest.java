@@ -19,6 +19,10 @@ class DatabaseTest {
         db=new NetworkStore(System.getenv("TEST_JDBC_URL"),USER,PASSWORD);db.initialize();db.verify();db.register(A);db.register(B);db.enable(A,true);db.enable(B,true);db.heartbeat(A,UUID.randomUUID());db.heartbeat(B,UUID.randomUUID());
     }
     @AfterEach void close(){if(db!=null)db.close();}
+    @Test void emptyFirstProfileIsDistinguishedFromSavedInventory()throws Exception{
+        UUID p=UUID.randomUUID(),session=UUID.randomUUID();assertFalse(db.hasSavedSnapshot(p));assertNull(db.claim(p,B,session,true));assertFalse(db.hasSavedSnapshot(p));db.abandonEmpty(p,session);assertFalse(db.hasSavedSnapshot(p));
+        UUID next=UUID.randomUUID();db.claim(p,B,next,false);assertTrue(db.save(p,next,position(1,1),true));assertTrue(db.hasSavedSnapshot(p));
+    }
     @Test void restartQueueRetainsExactNetherLocationAndInventoryWhenSourceReturns()throws Exception{
         db.dimensions(A,true);Region region=new Region("Overworld",4,-3);db.assign(region,A);
         UUID p=UUID.randomUUID(),session=UUID.randomUUID(),ticket=UUID.randomUUID();db.claim(p,A,session,true);

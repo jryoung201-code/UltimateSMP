@@ -149,6 +149,11 @@ public final class NetworkStore implements AutoCloseable {
     public Route route(UUID id) throws SQLException {
         try(Connection c=pool.getConnection();PreparedStatement s=prepare(c,"SELECT state,last_server,owner,target,ticket FROM "+S+"players WHERE player_id=?")){dialect.uuid(s,1,id);try(ResultSet r=s.executeQuery()){return r.next()?new Route(r.getString(1),r.getString(2),r.getString(3),r.getString(4),DatabaseDialect.uuid(r,5)):null;}}
     }
+    public boolean hasSavedSnapshot(UUID player)throws SQLException{
+        try(Connection c=pool.getConnection();PreparedStatement q=prepare(c,"SELECT 1 FROM "+S+"players WHERE player_id=? AND payload IS NOT NULL")){
+            dialect.uuid(q,1,player);try(ResultSet r=q.executeQuery()){return r.next();}
+        }
+    }
     /** Determines the correct server for a saved player's coordinates when ownership was edited offline. */
     public String loginTarget(UUID id,Route route) throws SQLException {
         if(!"offline".equals(route.state()))return route.loginServer();

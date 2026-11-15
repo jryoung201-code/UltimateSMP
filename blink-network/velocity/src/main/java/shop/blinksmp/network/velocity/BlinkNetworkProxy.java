@@ -158,7 +158,7 @@ public final class BlinkNetworkProxy {
                     if(permit!=null&&Objects.equals(permit.intent(),intent.key())&&permit.allows(target,System.nanoTime())&&db.ready(target))return target;
                     if(route!=null&&route.state().equals("handoff")){
                         if(!db.ready(target))return ""; // Never redirect an owned transfer ticket.
-                    }else if(route!=null&&intent.mode()==QueueIntent.Mode.JOIN){
+                    }else if(route!=null&&intent.mode()==QueueIntent.Mode.JOIN&&db.hasSavedSnapshot(player)){
                         if(intent.needsRtp()||!db.ready(target)){
                             String exclude=intent.origin();
                             // Fresh joins may RTP on any world. Leaving a restart excludes its origin.
@@ -194,7 +194,7 @@ public final class BlinkNetworkProxy {
     public boolean queueRecovery(Player player,String origin){
         if(!ready||!player.isActive()||proxy.getServer(origin).isEmpty())return false;
         try{Region.dimensionOf(origin);}catch(IllegalArgumentException ex){return false;}
-        waiting.computeIfAbsent(player.getUniqueId(),key->player.getCurrentServer().filter(c->origin.equals(c.getServerInfo().getName())).isPresent()?QueueIntent.restart(origin):QueueIntent.join(origin));
+        waiting.computeIfAbsent(player.getUniqueId(),key->QueueIntent.restart(origin));
         permits.remove(player.getUniqueId());return true;
     }
     private boolean queueBridge(String method,Player player){
