@@ -1,0 +1,16 @@
+name: UltimateLodestones
+version: 1.0.0
+main: shop.blinksmp.lodestones.UltimateLodestones
+api-version: '1.21.11'
+author: Aven
+description: Portable lodestone compass targets across Paper world servers.
+softdepend: [BlinkNetwork]
+commands:
+  lodestonecompass:
+    aliases: [lcompass]
+    description: Inspect or forget the target of your held lodestone compass.
+    usage: /<command> [status|forget]
+    permission: ultimatelodestones.use
+permissions:
+  ultimatelodestones.use:
+    default: true

@@ -1,0 +1,7 @@
+# Match each dimension to THIS backend's world. Use the same logical dimensions on every server.
+worlds:
+  Overworld: world
+  Nether: world_nether
+  End: world_the_end
+# Adds portable targets to new and existing, still-linked vanilla compasses.
+adopt-vanilla-compasses: true
