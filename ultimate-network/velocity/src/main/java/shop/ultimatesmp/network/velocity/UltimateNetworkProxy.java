@@ -14,6 +14,7 @@ import org.slf4j.Logger;import shop.ultimatesmp.network.*;
 public final class UltimateNetworkProxy {
  private static final MinecraftChannelIdentifier CHANNEL=MinecraftChannelIdentifier.from(Wire.CHANNEL);
  private final Map<UUID,Set<UUID>> remoteTabs=new HashMap<>();
+ private RenderMirror render;private long nextMirror;
  private final ProxyServer proxy;private final Logger log;
  private record State(String server,boolean hidden,boolean messages,boolean joins,boolean players,String authority,boolean ready,boolean trade,boolean muted,boolean homeAdmin,boolean tags,String prefix,int weight,long seen){}
  private record Operation(UUID id,UUID actor,UUID mover,UUID target,String moverServer,String targetServer,String after,long expires){}
@@ -23,7 +24,7 @@ public final class UltimateNetworkProxy {
  private final Set<UUID> moved=new HashSet<>();
  private final Requests requests=new Requests();private final Set<String> seenFrames=new LinkedHashSet<>();
  @Inject public UltimateNetworkProxy(ProxyServer proxy,Logger log){this.proxy=proxy;this.log=log;}
- @Subscribe public void start(ProxyInitializeEvent e){proxy.getChannelRegistrar().register(CHANNEL);proxy.getScheduler().buildTask(this,this::tick).repeat(1,TimeUnit.SECONDS).schedule();log.info("UltimateNetwork ready: network presence, requests, safe teleports, private chat and staff routing.");}
+ @Subscribe public void start(ProxyInitializeEvent e){proxy.getChannelRegistrar().register(CHANNEL);render=new RenderMirror(log);proxy.getScheduler().buildTask(this,this::tick).repeat(1,TimeUnit.SECONDS).schedule();log.info("UltimateNetwork ready: network presence, requests, safe teleports, private chat and staff routing.");}
  private static long now(){return System.currentTimeMillis();}
  private String server(Player p){return p.getCurrentServer().map(s->s.getServerInfo().getName()).orElse("");}
  private Player player(UUID id){return proxy.getPlayer(id).orElse(null);}
@@ -34,7 +35,7 @@ public final class UltimateNetworkProxy {
  private boolean send(Player p,Wire f){return p!=null&&p.getCurrentServer().map(s->s.sendPluginMessage(CHANNEL,f.encode())).orElse(false);}
  private Player find(String name){return proxy.getAllPlayers().stream().filter(p->p.getUsername().equalsIgnoreCase(name)||p.getUniqueId().toString().equalsIgnoreCase(name)).filter(this::visible).findFirst().orElseThrow(()->new IllegalArgumentException("Player not found or their server is unavailable"));}
  private void notice(Player subject,boolean join){Component c=Component.text(subject.getUsername()+(join?" joined UltimateSMP":" left UltimateSMP"),join?NamedTextColor.GREEN:NamedTextColor.GRAY);for(Player p:proxy.getAllPlayers()){State s=states.get(p.getUniqueId());if(fresh(s)&&s.joins&&s.players)p.sendMessage(c);}}
- @Subscribe public synchronized void connected(ServerConnectedEvent e){State old=states.get(e.getPlayer().getUniqueId());if(old!=null&&old.hidden)carryVanish.put(e.getPlayer().getUniqueId(),server(e.getPlayer()));send(e.getPlayer(),Wire.of("HELLO",e.getPlayer().getUniqueId()));}
+ @Subscribe public synchronized void connected(ServerConnectedEvent e){State old=states.get(e.getPlayer().getUniqueId());if(old!=null&&old.hidden)carryVanish.put(e.getPlayer().getUniqueId(),server(e.getPlayer()));send(e.getPlayer(),Wire.of("HELLO",e.getPlayer().getUniqueId()));rosters();}
  @Subscribe public synchronized void message(PluginMessageEvent e){
   if(!CHANNEL.equals(e.getIdentifier()))return;e.setResult(PluginMessageEvent.ForwardResult.handled());
   if(!(e.getSource() instanceof ServerConnection source)||!(e.getTarget() instanceof Player carrier))return;
@@ -47,6 +48,7 @@ public final class UltimateNetworkProxy {
     case "FAIL" -> {Operation op=operations.get(f.id());if(op!=null&&(f.actor().equals(op.mover)||f.actor().equals(op.target))){operations.remove(op.id);moved.remove(op.id);tell(op.actor,f.at(0));}}
     case "MOVED" -> {Operation op=operations.get(f.id());if(op!=null&&f.actor().equals(op.mover)){if(op.after.isEmpty())operations.remove(op.id);else moved.add(op.id);tell(op.actor,"Teleport started through the protected inventory handoff.");}}
     case "STAFF_REPLY" -> {UUID to=UUID.fromString(f.at(0));tell(to,f.at(1));}
+    case "NOTICE" -> {if(f.args().size()<3||f.args().size()>18||!Set.of("CHAT","TITLE","ACTIONBAR","BOSSBAR").contains(f.at(0))||Integer.parseInt(f.at(1))<1||Integer.parseInt(f.at(1))>60)throw new IllegalArgumentException("Invalid notice");for(Player p:proxy.getAllPlayers())send(p,new Wire(UUID.randomUUID(),"NOTICE",p.getUniqueId(),f.args()));}
     case "ANNOUNCE" -> {for(Player p:proxy.getAllPlayers())if(!server(p).equals(server(carrier)))p.sendMessage(Component.text(f.at(0),NamedTextColor.GOLD));}
    }
   }catch(IllegalArgumentException ex){tell(carrier.getUniqueId(),ex.getMessage());}catch(Exception ex){log.warn("Rejected network bridge frame ({})",ex.getClass().getSimpleName());}
@@ -94,7 +96,9 @@ public final class UltimateNetworkProxy {
   Operation op=new Operation(UUID.randomUUID(),actor,mover.getUniqueId(),target.getUniqueId(),server(mover),server(target),after,now()+20000);operations.put(op.id,op);send(target,new Wire(op.id,"LOCATE",target.getUniqueId(),List.of(warmup?"3":"0",states.get(mover.getUniqueId()).authority,after)));
  }
  private void location(Player target,Wire f){Operation op=operations.get(f.id());if(op==null||!op.target.equals(target.getUniqueId())||!op.targetServer.equals(server(target))||now()>=op.expires)return;Player mover=player(op.mover);if(!available(mover)||!op.moverServer.equals(server(mover)))throw new IllegalArgumentException("Teleport cancelled: player changed servers");var data=new ArrayList<>(f.args());data.add(target.getUniqueId().toString());send(mover,new Wire(op.id,"MOVE",mover.getUniqueId(),data));}
- private synchronized void tick(){requests.expire(now());for(Operation op:new ArrayList<>(operations.values())){
+ private synchronized void tick(){requests.expire(now());
+ if(render!=null&&now()>=nextMirror){nextMirror=now()+60000;render.publish((int)proxy.getAllPlayers().stream().filter(this::visible).count(),states.values().stream().filter(this::fresh).map(State::server).distinct().toList());}
+for(Operation op:new ArrayList<>(operations.values())){
   if(player(op.target)==null||!server(player(op.target)).equals(op.targetServer)||now()>=op.expires){operations.remove(op.id);moved.remove(op.id);send(player(op.mover),new Wire(op.id,"CANCEL",op.mover,List.of()));tell(op.actor,"Teleport timed out; your inventory remains protected.");continue;}
   if(!op.after.isEmpty()){Player mover=player(op.mover),target=player(op.target);if(available(mover)&&available(target)&&server(mover).equals(op.targetServer)&&server(target).equals(op.targetServer)&&(moved.contains(op.id)||!server(mover).equals(op.moverServer))){operations.remove(op.id);moved.remove(op.id);send(mover,new Wire(op.id,op.after.equals("trade")?"TRADE_OPEN":"INSPECT",op.mover,List.of(op.target.toString())));}}
  }

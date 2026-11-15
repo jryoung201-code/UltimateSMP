@@ -1,9 +1,9 @@
 name: Build UltimateNetwork integration
 on:
   push:
-    paths: ['ultimate-network/**', 'ultimate-ranks/**', 'ultimate-settings/**', 'ultimate-trades/**', 'ultimate-homes/**', 'blink-network/**', '.github/workflows/ultimate-network.yml']
+    paths: ['ultimate-network/**', 'ultimate-ranks/**', 'ultimate-settings/**', 'ultimate-trades/**', 'ultimate-homes/**', 'ultimate-announcements/**', 'blink-network/**', '.github/workflows/ultimate-network.yml']
   pull_request:
-    paths: ['ultimate-network/**', 'ultimate-ranks/**', 'ultimate-settings/**', 'ultimate-trades/**', 'ultimate-homes/**', 'blink-network/**', '.github/workflows/ultimate-network.yml']
+    paths: ['ultimate-network/**', 'ultimate-ranks/**', 'ultimate-settings/**', 'ultimate-trades/**', 'ultimate-homes/**', 'ultimate-announcements/**', 'blink-network/**', '.github/workflows/ultimate-network.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -27,6 +27,7 @@ jobs:
           mvn -B -ntp -f ultimate-settings/pom.xml package
           mvn -B -ntp -f ultimate-trades/pom.xml package
           mvn -B -ntp -f ultimate-homes/pom.xml package
+          mvn -B -ntp -f ultimate-announcements/pom.xml package
       - uses: actions/upload-artifact@v4
         with:
           name: UltimateNetwork-1.0.0
@@ -40,3 +41,4 @@ jobs:
             ultimate-settings/target/UltimateSettings-1.2.0.jar
             ultimate-trades/target/UltimateTrades-1.1.0.jar
             ultimate-homes/target/UltimateHomes-1.2.0.jar
+            ultimate-announcements/target/UltimateAnnouncements-1.1.0.jar
