@@ -46,6 +46,17 @@ final class PlayerSnapshot {
             String k="effects."+(i++)+".";y.set(k+"type",e.getType().getKey().toString());y.set(k+"duration",e.getDuration());y.set(k+"amplifier",e.getAmplifier());y.set(k+"ambient",e.isAmbient());y.set(k+"particles",e.hasParticles());y.set(k+"icon",e.hasIcon());
         }return new PlayerSnapshot(y);
     }
+    static PlayerSnapshot captureSource(Player p,String dimension,Location routing,boolean auxiliary){
+        PlayerSnapshot snapshot=capture(p,dimension,routing);
+        if(auxiliary){Location l=p.getLocation();snapshot.auxiliary(new shop.blinksmp.network.AuxiliaryPosition(l.getWorld().getName(),l.getX(),l.getY(),l.getZ(),l.getYaw(),l.getPitch()));}
+        return snapshot;
+    }
+    shop.blinksmp.network.AuxiliaryPosition auxiliary(){
+        if(!yaml.contains("auxiliary-world"))return null;
+        for(String k:List.of("x","y","z","yaw","pitch"))if(!yaml.isSet("auxiliary-"+k))throw new IllegalArgumentException("Incomplete auxiliary position");
+        return new shop.blinksmp.network.AuxiliaryPosition(yaml.getString("auxiliary-world"),yaml.getDouble("auxiliary-x"),yaml.getDouble("auxiliary-y"),yaml.getDouble("auxiliary-z"),(float)yaml.getDouble("auxiliary-yaw"),(float)yaml.getDouble("auxiliary-pitch"));
+    }
+    void auxiliary(shop.blinksmp.network.AuxiliaryPosition a){yaml.set("auxiliary-world",a.world());yaml.set("auxiliary-x",a.x());yaml.set("auxiliary-y",a.y());yaml.set("auxiliary-z",a.z());yaml.set("auxiliary-yaw",a.yaw());yaml.set("auxiliary-pitch",a.pitch());}
     static PlayerSnapshot decode(byte[] data) throws Exception {
         if(data.length>2_097_152)throw new IllegalArgumentException("Snapshot too large");
         var y=new YamlConfiguration();y.loadFromString(new String(data,StandardCharsets.UTF_8));return new PlayerSnapshot(y);

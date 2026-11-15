@@ -6,6 +6,13 @@ import org.bukkit.configuration.file.FileConfiguration;
 public final class RankConfig {
     private RankConfig(){}
     public static void migrate(FileConfiguration config) {
+        if(!config.contains("migrations.spawn-edit-permission",true)){
+            for(String role:List.of("OWNER","DEV")){
+                var grants=new java.util.ArrayList<>(config.getStringList("extra-permissions."+role));
+                if(!grants.contains("edit.spawn"))grants.add("edit.spawn");config.set("extra-permissions."+role,grants);
+            }
+            config.set("migrations.spawn-edit-permission",true);
+        }
         for(String suffix:List.of("PLUS","PLUS_PLUS","PLUS_PLUS_PLUS")) {
             for(String section:List.of("weights","prefixes","extra-permissions")) {
                 String old=section+".BLINK_"+suffix,next=section+".ULTIMATE_"+suffix;

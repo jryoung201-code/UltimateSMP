@@ -33,6 +33,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     private final Set<UUID> vanished=ConcurrentHashMap.newKeySet();
     private final Map<UUID,Integer> frozen=new HashMap<>();
     private final Map<UUID,Inventory> inspections=new HashMap<>();
+    private org.bukkit.configuration.file.FileConfiguration rankSettings;
     private volatile Map<Rank,Component> prefixes=Map.of();
     private volatile Map<Rank,Integer> weights=Map.of();
     private volatile java.util.function.Predicate<UUID> showTags=id->true;
@@ -49,12 +50,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             getLogger().severe("Cannot load players.yml; file preserved. Fix it before enabling UltimateRanks: "+ex);
             Bukkit.getPluginManager().disablePlugin(this); return;
         }
-        Map<Rank,Component> colors=new EnumMap<>(Rank.class);
-        for(Rank r:Rank.values()) colors.put(r,LEGACY.deserialize(getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r")));
-        prefixes=Map.copyOf(colors);
-        Map<Rank,Integer> loadedWeights=new EnumMap<>(Rank.class);
-        for(Rank r:Rank.values())loadedWeights.put(r,getConfig().getInt("weights."+r.name(),r.defaultWeight()));
-        weights=Map.copyOf(loadedWeights);
+        applyRankSettings(getConfig());
         bindSettings();
         Bukkit.getPluginManager().registerEvents(this,this);
         for(String cmd:getDescription().getCommands().keySet()) Objects.requireNonNull(getCommand(cmd)).setTabCompleter(this);
@@ -62,6 +58,17 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         getLogger().info("Ready. Console: rank set <player-or-uuid> OWNER. No player is automatically made staff or OP.");
     }
 
+    private void applyRankSettings(org.bukkit.configuration.file.FileConfiguration config){
+        Map<Rank,Component> colors=new EnumMap<>(Rank.class);Map<Rank,Integer> loaded=new EnumMap<>(Rank.class);
+        for(Rank r:Rank.values()){
+            String key=r.name();
+            if(config.contains("weights."+key,true)&&!config.isInt("weights."+key))throw new IllegalArgumentException("Invalid weight for "+key);
+            if(config.contains("prefixes."+key,true)&&!config.isString("prefixes."+key))throw new IllegalArgumentException("Invalid prefix for "+key);
+            for(Object node:config.getList("extra-permissions."+key,List.of()))if(!(node instanceof String p)||!p.matches("[a-zA-Z0-9_.:-]{1,128}"))throw new IllegalArgumentException("Invalid permission for "+key);
+            colors.put(r,LEGACY.deserialize(config.getString("prefixes."+key,r.color+"["+r.label()+"] &r")));loaded.put(r,config.getInt("weights."+key,r.defaultWeight()));
+        }
+        rankSettings=config;prefixes=Map.copyOf(colors);weights=Map.copyOf(loaded);
+    }
     @Override public void onDisable() {
         for(Player p:Bukkit.getOnlinePlayers()) {
             for(UUID id:vanished) { Player hidden=Bukkit.getPlayer(id); if(hidden!=null) p.showPlayer(this,hidden); }
@@ -81,7 +88,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     public String getRankName(UUID id) { return displayRank(id).name(); }
     public String getRankPrefix(UUID id) {
         Rank r=displayRank(id);
-        return getConfig().getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r");
+        return rankSettings.getString("prefixes."+r.name(),r.color+"["+r.label()+"] &r");
     }
     private void bindSettings() {
         settings=Bukkit.getPluginManager().getPlugin("UltimateSettings"); settingsRefresh=null;
@@ -193,7 +200,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             a.setPermission("ultimateranks.rank."+v.name().replace("ULTIMATE","BLINK").toLowerCase(Locale.ROOT),assigned.contains(v));
         for(Rank v:assigned) {
             grantHomePermission(a,v);
-            for(String perm:getConfig().getStringList("extra-permissions."+v.name())) a.setPermission(perm,true);
+            for(String perm:rankSettings.getStringList("extra-permissions."+v.name())) a.setPermission(perm,true);
         }
         if(!oldTabs.containsKey(id)) oldTabs.put(id,p.playerListName());
         Component tab=settingsTab?null:prefixes.get(displayRank(id)).append(Component.text(p.getName()));
@@ -439,6 +446,11 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             say(s,"/rank info [player] | /rank add <player> <rank> | /rank remove <player> [rank] | /rank set <player> <rank>");return;
         }
         String sub=args[0].toLowerCase(Locale.ROOT);
+        if(sub.equals("reload")){
+            require(args.length==1,"Usage: /rank reload");require(console(s)||Rules.allowed(rank(s),"rank"),"Your rank cannot reload rank settings.");
+            try{var next=new org.bukkit.configuration.file.YamlConfiguration();next.load(new java.io.File(getDataFolder(),"config.yml"));RankConfig.migrate(next);applyRankSettings(next);for(Player online:Bukkit.getOnlinePlayers())refresh(online);say(s,"Rank weights, prefixes and permissions reloaded. Saved player ranks were preserved.");}
+            catch(Exception ex){say(s,"Could not reload rank config. Check YAML, weights and permission names.");getLogger().warning("Rank config reload failed: "+ex.getClass().getSimpleName());}return;
+        }
         if(sub.equals("info")) {
             UUID id=args.length>=2?resolve(s,args[1]):self(s).getUniqueId();Entry e=store.get(id);
             say(s,e.name()+": "+rankLabels(e)+" | Display: "+displayRank(id).label());return;

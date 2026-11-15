@@ -10,7 +10,9 @@ public final class SnapshotPosition {
         Objects.requireNonNull(payload);
         if(payload.length==0||payload.length>2_097_152||!Double.isFinite(y)||Math.abs(y)>4096||Math.abs(x)>29_999_984||Math.abs(z)>29_999_984)throw new IllegalArgumentException("Invalid rescue snapshot or height");
         Region.at(dimension,x,z);
-        String text=new String(payload,StandardCharsets.UTF_8);
+        // Explicit rescue/RTP targets a gameplay world, so remove a previous auxiliary return marker.
+        String original=new String(payload,StandardCharsets.UTF_8);
+        String text=String.join("\n",Arrays.stream(original.split("\n",-1)).filter(line->!line.matches("^auxiliary-(world|x|y|z|yaw|pitch):.*")).toList());
         Map<String,String> replacements=Map.of("dimension",dimension,"x",Double.toString(x),"y",Double.toString(y),"z",Double.toString(z));
         Set<String> seen=new HashSet<>();String[] lines=text.split("\n",-1);
         for(int i=0;i<lines.length;i++) {

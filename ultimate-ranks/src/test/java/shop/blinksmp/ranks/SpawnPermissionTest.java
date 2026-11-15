@@ -1,0 +1,5 @@
+package shop.blinksmp.ranks;
+import java.util.*;import org.bukkit.configuration.file.YamlConfiguration;
+public final class SpawnPermissionTest {
+ public static void main(String[] args){var config=new YamlConfiguration();config.set("extra-permissions.OWNER",List.of("existing.owner"));config.set("extra-permissions.DEV",List.of("existing.dev"));config.set("extra-permissions.ADMIN",List.of("existing.admin"));RankConfig.migrate(config);if(!config.getStringList("extra-permissions.OWNER").containsAll(List.of("existing.owner","edit.spawn")))throw new AssertionError();if(!config.getStringList("extra-permissions.DEV").containsAll(List.of("existing.dev","edit.spawn")))throw new AssertionError();if(config.getStringList("extra-permissions.ADMIN").contains("edit.spawn"))throw new AssertionError();config.set("extra-permissions.DEV",List.of("custom"));RankConfig.migrate(config);if(config.getStringList("extra-permissions.DEV").contains("edit.spawn"))throw new AssertionError("Explicit config edit was overwritten");System.out.println("Spawn permission migration checks passed");}
+}

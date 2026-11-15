@@ -1,5 +1,5 @@
 name: UltimateNetwork
-version: 1.0.0
+version: 1.0.1
 main: shop.ultimatesmp.network.paper.UltimateNetworkPaper
 api-version: '1.21.11'
 depend: [BlinkNetwork]

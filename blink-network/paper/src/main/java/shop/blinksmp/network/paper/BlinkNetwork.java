@@ -184,20 +184,24 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 if(s.data==null){
                     if(!worlds.containsValue(p.getWorld()))throw new IllegalStateException("Import player is outside configured worlds");
                     Region r=Region.at(dimension(p.getWorld()),p.getX(),p.getZ());if(!id.equals(regions.get(r)))throw new IllegalStateException("Import spawn region must be assigned to this server");
-                    s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();s.loaded=true;checkpointInitial(p,s);initialJoinRtp(p,s);return;
+                    s.data=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld())).bytes();s.loaded=true;checkpointInitial(p,s);initialJoinRtp(p,s);return;
                 }
                 PlayerSnapshot snapshot=PlayerSnapshot.decode(s.data);
                 World arrival=Objects.requireNonNull(worlds.get(snapshot.dimension()),"Destination world missing");
                 Location requested=snapshot.location(arrival);
                 TransferSafety.Point landing=TransferSafety.landing(regions,id,snapshot.dimension(),requested.getX(),requested.getZ(),networkBorders.get(snapshot.dimension()));
                 Location dest=requested.clone();dest.setX(landing.x());dest.setZ(landing.z());
-                arrival.getChunkAtAsync(dest,true).thenAccept(chunk->main(()->{
+                AuxiliaryPosition auxiliary=snapshot.auxiliary();
+                AuxiliaryWorld registered=auxiliary==null?null:auxiliaryWorlds.get(auxiliary.world());
+                if(auxiliary!=null&&(registered==null||!registered.owner().isEnabled()))throw new IllegalStateException("Destination auxiliary world is unavailable");
+                Location physical=auxiliary==null?dest:new Location(registered.world(),auxiliary.x(),auxiliary.y(),auxiliary.z(),auxiliary.yaw(),auxiliary.pitch());
+                physical.getWorld().getChunkAtAsync(physical,true).thenAccept(chunk->main(()->{
                     if(!p.isOnline()||sessions.get(p.getUniqueId())!=s)return;
                     try {
-                        Location resolved=snapshot.yaml.getBoolean("portal-arrival",false)?safePortalLanding(dest):safeLanding(dest);
+                        Location resolved=auxiliary!=null?auxiliaryLanding(physical):snapshot.yaml.getBoolean("portal-arrival",false)?safePortalLanding(dest):safeLanding(dest);
                         if(snapshot.yaml.getBoolean("rtp-arrival",false)&&!safeFloor(resolved))throw new IllegalStateException("RTP landing changed; retry from queue");
                         snapshot.yaml.set("rtp-arrival",null);snapshot.yaml.set("portal-arrival",null);
-                        snapshot.relocate(resolved);
+                        if(auxiliary==null)snapshot.relocate(resolved);else snapshot.auxiliary(new AuxiliaryPosition(resolved.getWorld().getName(),resolved.getX(),resolved.getY(),resolved.getZ(),resolved.getYaw(),resolved.getPitch()));
                         // Own frozen teleport is permitted only around this synchronous call.
                         restoring.add(p.getUniqueId());boolean moved;
                         try{moved=p.teleport(resolved,PlayerTeleportEvent.TeleportCause.PLUGIN);}finally{restoring.remove(p.getUniqueId());}
@@ -205,12 +209,51 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                         restoreProfiles(p,s,true);
                         snapshot.apply(p);
                         restoreProfiles(p,s,false);
-                        s.lastOwned=resolved.clone();s.data=snapshot.bytes();
+                        s.lastOwned=auxiliary==null?resolved.clone():dest.clone();s.data=snapshot.bytes();
                         s.loaded=true;checkpointInitial(p,s);
                     }catch(Exception ex){problem("Restore failed; state preserved",ex);p.kickPlayer("Destination could not be restored safely. Contact staff.");}
                 })).exceptionally(ex->{main(()->p.kickPlayer("Destination chunk could not load."));return null;});
             }catch(Exception ex){problem("Restore rejected; state preserved",ex);p.kickPlayer("Network state needs staff attention.");}
         });
+    }
+    private record AuxiliaryWorld(org.bukkit.plugin.Plugin owner,World world){}
+    private final Map<String,AuxiliaryWorld> auxiliaryWorlds=new HashMap<>();
+    public void registerAuxiliaryWorld(org.bukkit.plugin.Plugin owner,World auxiliary){
+        if(!Bukkit.isPrimaryThread()||owner==null||!owner.isEnabled()||auxiliary==null||worlds.containsValue(auxiliary))throw new IllegalArgumentException("Invalid auxiliary world registration");
+        AuxiliaryWorld old=auxiliaryWorlds.get(auxiliary.getName());if(old!=null&&old.owner()!=owner)throw new IllegalStateException("Auxiliary world already managed");
+        auxiliaryWorlds.put(auxiliary.getName(),new AuxiliaryWorld(owner,auxiliary));
+    }
+    public boolean isAuxiliaryWorld(World candidate){return candidate!=null&&auxiliaryWorlds.containsKey(candidate.getName())&&auxiliaryWorlds.get(candidate.getName()).world()==candidate;}
+    /** Auxiliary travel still uses the normal fenced inventory transaction on remote backends. */
+    public java.util.concurrent.CompletableFuture<Boolean> networkWorldTeleport(Player player,String target,String worldName,double x,double y,double z,float yaw,float pitch){
+        var result=new java.util.concurrent.CompletableFuture<Boolean>();
+        if(!Bukkit.isPrimaryThread()||!isPlayerReady(player)||blocked(player)){result.complete(false);return result;}
+        final AuxiliaryPosition desired;
+        try{desired=new AuxiliaryPosition(worldName,x,y,z,yaw,pitch);Region.dimensionOf(target);}catch(Exception ex){result.complete(false);return result;}
+        if(id.equals(target)){
+            AuxiliaryWorld registered=auxiliaryWorlds.get(worldName);if(registered==null||!registered.owner().isEnabled()){result.complete(false);return result;}
+            World auxiliary=registered.world();Location to=new Location(auxiliary,x,y,z,yaw,pitch);if(!auxiliary.getWorldBorder().isInside(to)){result.complete(false);return result;}
+            Session s=sessions.get(player.getUniqueId());Location anchor;
+            try{anchor=sourceLocation(player,s).clone();}catch(Exception ex){result.complete(false);return result;}
+            auxiliary.getChunkAtAsync(to,true).whenComplete((chunk,error)->main(()->{
+                if(error!=null||!player.isOnline()||sessions.get(player.getUniqueId())!=s||!isPlayerReady(player)){result.complete(false);return;}
+                try{Location landing=auxiliaryLanding(to);s.lastOwned=anchor;boolean moved=player.teleport(landing,PlayerTeleportEvent.TeleportCause.PLUGIN);if(moved)checkpoint(player,s);result.complete(moved);}catch(Exception ex){result.complete(false);}
+            }));return result;
+        }
+        String issue=destinationIssue(target);if(issue!=null){player.sendMessage(issue);result.complete(false);return result;}
+        Session s=sessions.get(player.getUniqueId());io.execute(()->{
+            try{NetworkStore.Rtp anchor=db.rtpPoints("").stream().filter(point->point.server().equals(target)).findFirst().orElse(null);
+                main(()->{if(anchor==null||!player.isOnline()||sessions.get(player.getUniqueId())!=s||!isPlayerReady(player)){result.complete(false);return;}
+                    World local=worlds.get("Overworld");if(local==null){result.complete(false);return;}
+                    transfer(player,s,target,"Overworld",new Location(local,anchor.x(),anchor.y(),anchor.z(),yaw,pitch),null,false,desired);result.complete(s.transferring);
+                });
+            }catch(Exception ex){result.complete(false);}
+        });return result;
+    }
+    private Location auxiliaryLanding(Location requested){
+        if(!isAuxiliaryWorld(requested.getWorld()))throw new IllegalStateException("Unregistered auxiliary world");
+        for(int dy:new int[]{0,1,2,3,4}){Location test=requested.clone().add(0,dy,0);if(safe(test))return test;}
+        throw new IllegalStateException("Auxiliary landing is obstructed");
     }
     private final Set<UUID> restoring=new HashSet<>();
     private static String dimension(World w){return switch(w.getEnvironment()){case NETHER->"Nether";case THE_END->"End";default->"Overworld";};}
@@ -349,11 +392,11 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     private void checkpointInitial(Player p,Session s){
         Map<String,byte[]> modules;
         try{modules=captureProfiles(p);}catch(Exception ex){problem("Initial profile capture failed",ex);p.kickPlayer("Network profile capture failed.");return;}
-        s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();byte[] bytes=s.data;
+        s.data=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld())).bytes();byte[] bytes=s.data;
         io.execute(()->{try{persistProfiles(p.getUniqueId(),s,modules);if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException("Lost session lock");main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s){s.automaticAfter=System.currentTimeMillis()+TransferSafety.COOLDOWN_MILLIS;s.frozen=false;p.sendMessage("BlinkSMP network data loaded.");}});}catch(Exception ex){problem("Initial save failed",ex);main(()->p.kickPlayer("Network save failed. Your data is locked for recovery."));}});
     }
     private void checkpoint(Player p,Session s){
-        try{s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();}catch(Exception e){return;}
+        try{s.data=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld())).bytes();}catch(Exception e){return;}
         byte[] bytes=s.data;Map<String,byte[]> modules;
         try{modules=captureProfiles(p);}catch(Exception ex){problem("Checkpoint profile capture failed",ex);return;}
         s.saving=true;
@@ -363,6 +406,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         Player p=e.getPlayer();if(!active||restoring.contains(p.getUniqueId()))return;
         if(blocked(p)){e.setCancelled(true);return;}
         if(e.getTo()==null)return;
+        if(isAuxiliaryWorld(e.getTo().getWorld())){if(!e.getTo().getWorld().getWorldBorder().isInside(e.getTo()))e.setCancelled(true);return;}
         String dimension=dimension(e.getTo().getWorld());
         if(!worlds.containsValue(e.getTo().getWorld())){e.setCancelled(true);p.sendActionBar(MAINTENANCE);return;}
         if(!withinBorder(dimension,e.getTo().getX(),e.getTo().getZ())){e.setCancelled(true);p.sendActionBar("You reached the "+dimension+" world border.");return;}
@@ -416,6 +460,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         throw new IllegalStateException("No safe portal floor in owned loaded terrain");
     }
     private void retreat(Player p,Session s){
+        if(isAuxiliaryWorld(p.getWorld())&&safe(p.getLocation()))return;
         if(s.lastOwned==null)return;
         try {
             Location old=s.lastOwned.clone();String dimension=dimension(old.getWorld());TransferSafety.Point inset=TransferSafety.landing(regions,id,dimension,old.getX(),old.getZ(),networkBorders.get(dimension));
@@ -455,6 +500,10 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(!active||restoring.contains(e.getPlayer().getUniqueId()))return;
         if(blocked(e.getPlayer())){e.setCancelled(true);return;}
         Location to=e.getTo();if(to==null)return;
+        if(isAuxiliaryWorld(to.getWorld())){
+            if(maintenance||!safe(to)){e.setCancelled(true);return;}
+            Session session=sessions.get(e.getPlayer().getUniqueId());try{session.lastOwned=sourceLocation(e.getPlayer(),session).clone();}catch(Exception ex){e.setCancelled(true);}return;
+        }
         String destDimension=switch(to.getWorld().getEnvironment()){case NETHER->"Nether";case THE_END->"End";default->"Overworld";};
         if(!withinBorder(destDimension,to.getX(),to.getZ())){e.setCancelled(true);e.getPlayer().sendMessage("That destination is outside the "+destDimension+" world border.");return;}
         String owner=regions.get(Region.at(destDimension,to.getX(),to.getZ()));
@@ -472,6 +521,9 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     }
     private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom){transfer(p,s,target,destDimension,dest,committedFrom,false);}
     private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom,boolean portal){
+        transfer(p,s,target,destDimension,dest,committedFrom,portal,null);
+    }
+    private void transfer(Player p,Session s,String target,String destDimension,Location dest,Location committedFrom,boolean portal,AuxiliaryPosition auxiliary){
         if(maintenance){p.sendMessage(MAINTENANCE);return;}
         if(s==null||s.frozen||s.transferring||s.saving||s.profileRefreshing||p.isDead()||p.isInsideVehicle()||!p.getPassengers().isEmpty()||p.isSleeping())return;
         if(p.getOpenInventory().getTopInventory().getType()!=InventoryType.CRAFTING){p.sendActionBar("Close your inventory before crossing.");return;}
@@ -481,8 +533,8 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             Location rollback=committedFrom==null?sourceLocation(p,s):committedFrom.clone();
             if(!owned(rollback))throw new IllegalStateException("Rollback position is not owned by this server");
             s.lastOwned=rollback.clone();
-            byte[] source=PlayerSnapshot.capture(p,dimension(rollback.getWorld()),rollback).bytes();
-            PlayerSnapshot arriving=PlayerSnapshot.capture(p,destDimension,dest);if(portal)arriving.yaml.set("portal-arrival",true);
+            byte[] source=PlayerSnapshot.captureSource(p,dimension(rollback.getWorld()),rollback,isAuxiliaryWorld(p.getWorld())).bytes();
+            PlayerSnapshot arriving=PlayerSnapshot.capture(p,destDimension,dest);if(auxiliary!=null)arriving.auxiliary(auxiliary);if(portal)arriving.yaml.set("portal-arrival",true);
             byte[] destination=arriving.bytes();s.data=source;
             Map<String,byte[]> modules=captureProfiles(p);
             UUID ticket=s.ticket;
@@ -535,7 +587,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
     @EventHandler(priority=EventPriority.MONITOR) public void death(PlayerDeathEvent e){
         if(!active)return;Player p=e.getEntity();Session s=sessions.get(p.getUniqueId());if(s==null||!s.loaded||s.transferring)return;
         main(()->{if(p.isOnline()&&sessions.get(p.getUniqueId())==s&&!s.frozen){
-            try{PlayerSnapshot snapshot=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s));
+            try{PlayerSnapshot snapshot=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld()));
                 if(!e.getKeepLevel()){snapshot.yaml.set("level",e.getNewLevel());snapshot.yaml.set("exp",0.0);snapshot.yaml.set("total-exp",e.getNewTotalExp());}
                 s.data=snapshot.bytes();byte[] bytes=s.data;
                 io.execute(()->{try{if(!db.save(p.getUniqueId(),s.token,bytes,false))throw new IllegalStateException();}catch(Exception ex){problem("Death checkpoint failed",ex);main(()->p.kickPlayer("Network save failed. Contact staff before reconnecting."));}});
@@ -676,7 +728,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             // Close containers before capture; cursor items return to inventory through Bukkit.
             p.closeInventory();
             if(!p.getItemOnCursor().isEmpty()){p.sendMessage("Please empty your cursor so the server can restart safely.");return;}
-            Location from=sourceLocation(p,s);byte[] data=PlayerSnapshot.capture(p,dimension(from.getWorld()),from).bytes();
+            Location from=sourceLocation(p,s);byte[] data=PlayerSnapshot.captureSource(p,dimension(from.getWorld()),from,isAuxiliaryWorld(p.getWorld())).bytes();
             Map<String,byte[]> modules=captureProfiles(p);UUID ticket=UUID.randomUUID();
             s.frozen=true;s.transferring=true;s.ticket=ticket;s.data=data;s.freezeAt=System.currentTimeMillis();
             io.execute(()->{try{
@@ -718,7 +770,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
         if(db!=null)for(Player p:Bukkit.getOnlinePlayers()){
             Session s=sessions.remove(p.getUniqueId());if(s==null||s.transferring)continue;
             Map<String,byte[]> modules=Map.of();
-            if(s.loaded)try{s.data=PlayerSnapshot.capture(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s)).bytes();modules=safeDisconnectModules(s,captureProfiles(p));}catch(Exception ignored){}
+            if(s.loaded)try{s.data=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld())).bytes();modules=safeDisconnectModules(s,captureProfiles(p));}catch(Exception ignored){}
             p.kickPlayer("BlinkSMP network is shutting down. Please reconnect shortly.");
             byte[] data=s.data;Map<String,byte[]> savedModules=modules;if(data!=null)io.execute(()->{try{persistProfiles(p.getUniqueId(),s,savedModules);db.save(p.getUniqueId(),s.token,data,true);}catch(Exception ex){problem("Shutdown save failed; lock retained",ex);}});
         }
