@@ -3,3 +3,6 @@
 storage: auto
 # Automatic refresh of shared reward definitions; save conflicts never overwrite another editor.
 refresh-seconds: 10
+
+# Cosmetic reward reveal length (0-10 seconds). Prizes are secured before opening.
+opening-animation-seconds: 3
