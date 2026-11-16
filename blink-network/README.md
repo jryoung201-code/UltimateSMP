@@ -1,3 +1,13 @@
+# BlinkNetwork 0.5.5 — automatic initial join repair
+
+Replace the existing BlinkNetwork Paper JAR on both gameplay backends. Keep the existing plugins/BlinkNetwork configuration and database. Do not install the Paper JAR on Velocity or run two BlinkNetwork JARs together. Fully stop the backend before replacing the JAR, then start it. Schema 3 and the existing proxy protocol are unchanged; the Velocity JAR does not need replacement for this fix.
+
+A first network login previously rejected local player data when the vanilla spawn / saved local position was outside this backend's territory. The plugin now keeps the player frozen and, only for a claimed record with no network snapshot, asynchronously loads up to 16 owned Overworld candidate chunks, verifies solid floor, two clear blocks, hazards and borders, and teleports to an owned landing before capturing the local inventory. No blocks are placed, territory moved, snapshots reset, or locks bypassed. Both Java and Floodgate UUIDs use the same path. An existing nonempty network snapshot is still restored by the normal authoritative restore path.
+
+The bounded search checks nine columns per candidate chunk. If no safe landing exists, it disconnects with a specific staff diagnostic and retains data. Only initial local imports are repaired; unrelated existing-snapshot restoration errors are not silently reset. The usual first-join RTP runs after the initial checkpoint. This fix does not modify queue title packets or Geyser settings.
+
+Verify after installation: `blinknet` should report 0.5.5; the previously rejected Bedrock user should join. Check the initial-location-repaired message once, verify inventory, disconnect/reconnect and transfer to the other backend. Automated tests cover ownership, negative coordinates, borders, bounded search, plus the existing database fencing suite; live server login requires testing after install.
+
 # BlinkNetwork 0.5.0: PostgreSQL, MySQL and MariaDB
 
 The Paper backends and Velocity proxy can now use the same existing MySQL/MariaDB database, including host-provided databases. `jdbc:mysql:` and `jdbc:mariadb:` select the MySQL dialect; `jdbc:postgresql:` keeps the existing PostgreSQL dialect. Both JARs bundle the required drivers. Schema version remains 3. PostgreSQL users do not need to change database settings.
