@@ -82,8 +82,18 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         hiddenNames=Set.of();vanished.clear(); frozen.clear(); inspections.clear(); spectatorModes.clear();
     }
 
-    private Rank rank(UUID id) { return store.get(id).rank(); }
-    private Rank displayRank(UUID id) { return Rank.display(store.get(id).ranks(),weights); }
+    private final Map<UUID,Map<Rank,Long>> temporaryRanks=new HashMap<>();
+    private Set<Rank> effectiveRanks(UUID id){return TemporaryRankPolicy.combine(store.get(id).ranks(),temporaryRanks.getOrDefault(id,Map.of()),System.currentTimeMillis());}
+    private Rank rank(UUID id) { return effectiveRanks(id).stream().max(Comparator.comparingInt(r->r.level)).orElse(Rank.MEMBER); }
+    /** Trusted plugin API; expiry overlays are never exported as permanent rank assignments. */
+    public void setTemporaryRankExpiries(UUID id,Map<String,Long> values){
+        if(!Bukkit.isPrimaryThread())throw new IllegalStateException("Use main thread");
+        Map<Rank,Long> next=new EnumMap<>(Rank.class);values.forEach((key,expiry)->{Rank r=Rank.parse(key);if(expiry>System.currentTimeMillis())next.put(r,expiry);});
+        if(next.isEmpty())temporaryRanks.remove(id);else temporaryRanks.put(id,Map.copyOf(next));
+        Player player=Bukkit.getPlayer(id);if(player!=null)refresh(player);
+    }
+    public String normalizeTemporaryRank(String value){return Rank.parse(value).name();}
+    private Rank displayRank(UUID id) { return Rank.display(effectiveRanks(id),weights); }
     public int getRankWeight(UUID id) { return weights.get(displayRank(id)); }
     public String getRankName(UUID id) { return displayRank(id).name(); }
     public String getRankPrefix(UUID id) {
@@ -194,7 +204,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         for(String cmd:Rules.MINIMUM.keySet()) a.setPermission("ultimateranks.command."+cmd,Rules.allowed(r,cmd));
         a.setPermission("ultimateranks.staff",r.level>=Rank.HELPER.level);
         a.setPermission("ultimatehomes.admin",r.level>=Rank.ADMIN.level);
-        Set<Rank> assigned=store.get(id).ranks();
+        Set<Rank> assigned=effectiveRanks(id);
         for(Rank v:Rank.values()) a.setPermission("ultimateranks.rank."+v.name().toLowerCase(Locale.ROOT),assigned.contains(v));
         for(Rank v:Rank.values())if(v.name().startsWith("ULTIMATE_PLUS"))
             a.setPermission("ultimateranks.rank."+v.name().replace("ULTIMATE","BLINK").toLowerCase(Locale.ROOT),assigned.contains(v));
@@ -460,7 +470,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         require(args.length>=(sub.equals("remove")?2:3),"Usage: /rank "+sub+" <player-or-uuid> <rank>");
         UUID id=resolve(s,args[1]);Entry e=store.get(id);
         Rank assigned=args.length>=3?Rank.parse(String.join(" ",Arrays.copyOfRange(args,2,args.length))):Rank.MEMBER;
-        require(console(s)||Rules.canAssign(rank(s),e.rank(),assigned),"You may only manage and assign ranks below your own. Console assigns OWNER.");
+        require(console(s)||Rules.canAssign(rank(s),rank(id),assigned),"You may only manage and assign ranks below your own. Console assigns OWNER.");
         Entry next=switch(sub){case "add"->e.added(assigned);case "remove"->args.length>=3?e.removed(assigned):e.ranked(Rank.MEMBER);default->e.ranked(assigned);};
         persist(id,next);frozen.remove(id);
         Player p=Bukkit.getPlayer(id);if(p!=null){refresh(p);say(p,"Your ranks: "+rankLabels(next));}

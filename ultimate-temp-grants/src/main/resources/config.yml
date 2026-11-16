@@ -1,0 +1,7 @@
+# auto uses BlinkNetwork's MySQL/MariaDB credentials when installed.
+# Otherwise local grants/vouchers are kept in data.yml.
+storage: auto
+refresh-seconds: 5
+# Supports & color codes. These are defaults when no custom name is given.
+rank-item-name: '&6{target} Rank Voucher &7({duration})'
+permission-item-name: '&bPermission Voucher &7({duration})'
