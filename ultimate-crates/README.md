@@ -1,4 +1,4 @@
-# UltimateCrates 1.1.0
+# UltimateCrates 1.2.0
 
 Paper 1.21.11 / Java 21. Install the JAR in `plugins/` on both Paper backends and fully restart them. Do not install on Velocity. The plugin recognizes UltimateRanks OWNER/DEV and OP as crate admins; other staff need `ultimatecrates.admin`. Players have `ultimatecrates.use` by default. Placing/registering in `ultimate_spawn` also requires `edit.spawn`.
 
@@ -80,3 +80,8 @@ Reward numbers match slots 1-45 in a freshly opened editor. Fixed percentages ar
 ```
 
 Key-all gives five Common keys to every ready online player on the EXECUTING BACKEND, with an admin summary of given/full/loading recipients. No keys are dropped for full inventories. It does not broadcast across Velocity; run on each backend to cover both servers. Uses the existing admin authorization. The amount defaults to one and is capped at 64 per player per invocation.
+
+## Player opening GUI (1.2.0)
+Right-clicking a registered crate with a matching key opens a 27-slot rolling reward display. The final prize is shown in the center under the yellow marker. The reel is cosmetic: the actual weighted draw and inventory grant happen once before the screen opens, so closing, disconnecting or restarting cannot cancel that already-delivered prize or grant another copy. Display items cannot be taken, shift-clicked, hotbar-swapped or dragged out. Closing early ends the animation and reports the secured prize.
+
+`opening-animation-seconds` defaults to 3 and accepts 0-10. Zero shows the prize immediately in the GUI. Update the Crates JAR on both Paper backends; no proxy, Ranks or TempGrants update is needed. Existing config files use the default automatically. Java/Bedrock gameplay rendering still needs a live check; the GUI uses normal chest inventory screens.
