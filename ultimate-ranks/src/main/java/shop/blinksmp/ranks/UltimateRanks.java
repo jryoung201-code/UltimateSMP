@@ -82,7 +82,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         hiddenNames=Set.of();vanished.clear(); frozen.clear(); inspections.clear(); spectatorModes.clear();
     }
 
-    private final Map<UUID,Map<Rank,Long>> temporaryRanks=new HashMap<>();
+    private final Map<UUID,Map<Rank,Long>> temporaryRanks=new ConcurrentHashMap<>();
     private Set<Rank> effectiveRanks(UUID id){return TemporaryRankPolicy.combine(store.get(id).ranks(),temporaryRanks.getOrDefault(id,Map.of()),System.currentTimeMillis());}
     private Rank rank(UUID id) { return effectiveRanks(id).stream().max(Comparator.comparingInt(r->r.level)).orElse(Rank.MEMBER); }
     /** Trusted plugin API; expiry overlays are never exported as permanent rank assignments. */
@@ -492,6 +492,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
     @EventHandler public void quit(PlayerQuitEvent event) {
         UUID id=event.getPlayer().getUniqueId();
+        temporaryRanks.remove(id);
         if(vanished.remove(id)) {
             event.quitMessage(null);
             event.getPlayer().removeMetadata("vanished",this);refreshHiddenNames();
@@ -507,7 +508,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             Bukkit.getScheduler().runTask(this,()->event.getPlayer().sendMessage(Component.text(notice("Muted",e.mute())))); return;
         }
         if(vanished.contains(id)) { event.setCancelled(true); Bukkit.getScheduler().runTask(this,()->say(event.getPlayer(),"Disable vanish to use public chat, or use /sc.")); return; }
-        Component prefix=prefixes.get(Rank.display(e.ranks(),weights));
+        Component prefix=prefixes.get(displayRank(id));
         event.renderer((source,displayName,message,viewer)->
                 ((viewer instanceof Player recipient && !showTags.test(recipient.getUniqueId()))?Component.empty():prefix)
                 .append(displayName).append(Component.text(": ")).append(message));
