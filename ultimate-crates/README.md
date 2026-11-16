@@ -1,4 +1,4 @@
-# UltimateCrates 1.0.1
+# UltimateCrates 1.1.0
 
 Paper 1.21.11 / Java 21. Install the JAR in `plugins/` on both Paper backends and fully restart them. Do not install on Velocity. The plugin recognizes UltimateRanks OWNER/DEV and OP as crate admins; other staff need `ultimatecrates.admin`. Players have `ultimatecrates.use` by default. Placing/registering in `ultimate_spawn` also requires `edit.spawn`.
 
@@ -45,3 +45,38 @@ CI compiles against Paper 1.21.11 and checks weighted selection boundaries, safe
 
 ## Timed voucher rewards
 UltimateTempGrants 1.0.0 is detected dynamically. Its reward templates are materialized into fresh one-use voucher IDs before key consumption. The integration rechecks inventory readiness, the actual key and capacity after issuance. Ordinary item rewards remain synchronous.
+
+## Floating text, rarity and key-all (1.1.0)
+
+Registered crate chests now show floating text automatically. Labels use temporary TextDisplay entities, do not force chunks to load, and are removed on disable/unregister/chunk unload. They are reconstructed from the saved crate definition. Java text scaling uses the display transformation; Bedrock/Geyser rendering has not been tested.
+
+```
+/crates hologram common text &6Common Crate\n&fRight-click to open
+/crates hologram common color gold
+/crates hologram common color #aa55ff
+/crates hologram common size 1.5
+/crates hologram common height 1.7
+/crates hologram common hide
+/crates hologram common show
+```
+
+Text supports `&` colors, literal `\n` newlines and `{name}`. Inline colors override the label's base color. Size is 0.25-4; height is 1.1-6 blocks measured from the crate block's base. In `/crates edit`, the name-tag button opens size/color/height/visibility controls. Return to rewards and SAVE. Commands save immediately. Label settings synchronize with shared crate definitions; physical label entities exist only on backends with a registered, loaded crate block. Update both backends so an older editor cannot drop newer metadata.
+
+Left-click a reward in the editor, then choose Common, Uncommon, Rare or Legendary. Present groups receive relative shares 60/25/12/3, divided among their automatic rewards. For example, two Common items and one of each other rarity give each Common 30%, Uncommon 25%, Rare 12%, Legendary 3%. Missing groups redistribute their share. Weight controls change the relative chances *within* a group. Existing rewards retain their original weight-only probabilities until rarity presets are introduced; old entries then join Common.
+
+Manual overrides use percentage points. The editor has +/-1% and Reset-to-auto controls. For exact values:
+
+```
+/crates rarity common 1 rare
+/crates chance common 1 5
+/crates chance common 1 auto
+```
+
+Reward numbers match slots 1-45 in a freshly opened editor. Fixed percentages are reserved first; automatic entries share the remainder using rarity budgets. Totals above 100% are rejected. If every reward is manual, their percentages must total 100%. Setting one to 100% makes others zero until adjusted. Previews show actual calculated probabilities. New copied rewards default to Common. Chance/rarity changes preserve labels and full item metadata.
+
+```
+/crates keyall common 5
+/keyall common 5
+```
+
+Key-all gives five Common keys to every ready online player on the EXECUTING BACKEND, with an admin summary of given/full/loading recipients. No keys are dropped for full inventories. It does not broadcast across Velocity; run on each backend to cover both servers. Uses the existing admin authorization. The amount defaults to one and is capped at 64 per player per invocation.
