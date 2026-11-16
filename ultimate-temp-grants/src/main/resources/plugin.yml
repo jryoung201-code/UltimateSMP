@@ -1,0 +1,16 @@
+name: UltimateTempGrants
+version: 1.0.0
+main: shop.ultimatesmp.tempgrants.UltimateTempGrants
+api-version: '1.21.11'
+depend: [UltimateRanks]
+softdepend: [BlinkNetwork]
+author: Aven
+commands:
+  tempgrant:
+    aliases: [voucher, tempvoucher]
+    description: Temporary rank and permission voucher items
+permissions:
+  ultimatetempgrants.admin:
+    default: op
+  ultimatetempgrants.use:
+    default: true

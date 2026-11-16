@@ -1,0 +1,33 @@
+package shop.ultimatesmp.tempgrants;
+import java.util.*;import java.sql.*;import java.nio.file.*;import org.bukkit.configuration.file.YamlConfiguration;
+final class GrantStore {
+ record Voucher(UUID id,String kind,String target,long duration,String name){Voucher{Grant.kind(kind);if(target==null||target.isBlank()||target.length()>128||name==null||name.length()>128||duration<1000||duration>Grant.MAX_DURATION)throw new IllegalArgumentException("Invalid voucher");}}
+ record Redemption(boolean applied,Grant grant){}
+ private final Path file;private final String url,user,password;
+ GrantStore(Path file,String url,String user,String password){this.file=file;this.url=url;this.user=user;this.password=password;}
+ private Connection connection()throws SQLException{Properties p=new Properties();p.setProperty("user",user);p.setProperty("password",password);p.setProperty("connectTimeout","3000");p.setProperty("socketTimeout","5000");return new org.mariadb.jdbc.Driver().connect(url,p);}
+ void initialize()throws Exception{if(url==null){Files.createDirectories(file.getParent());return;}try(var c=connection();var s=c.createStatement()){s.executeUpdate("CREATE TABLE IF NOT EXISTS ultimatesmp_temp_vouchers_v1 (id VARCHAR(36) PRIMARY KEY,kind VARCHAR(8) NOT NULL,target VARCHAR(128) NOT NULL,duration_ms BIGINT NOT NULL,custom_name VARCHAR(128) NOT NULL,used_by VARCHAR(36) NULL,used_at BIGINT NULL) ENGINE=InnoDB");s.executeUpdate("CREATE TABLE IF NOT EXISTS ultimatesmp_temp_grants_v1 (player_id VARCHAR(36) NOT NULL,kind VARCHAR(8) NOT NULL,target VARCHAR(128) NOT NULL,expires_at BIGINT NOT NULL,PRIMARY KEY(player_id,kind,target)) ENGINE=InnoDB");}}
+ private YamlConfiguration local()throws Exception{var y=new YamlConfiguration();if(Files.exists(file))y.load(file.toFile());return y;}
+ private void write(YamlConfiguration y)throws Exception{Path temp=Files.createTempFile(file.getParent(),"grants-",".tmp");try{Files.writeString(temp,y.saveToString());try{Files.move(temp,file,StandardCopyOption.ATOMIC_MOVE,StandardCopyOption.REPLACE_EXISTING);}catch(AtomicMoveNotSupportedException e){Files.move(temp,file,StandardCopyOption.REPLACE_EXISTING);}}finally{Files.deleteIfExists(temp);}}
+ void mint(List<Voucher> vouchers)throws Exception{
+  if(url==null){var y=local();for(var v:vouchers){String p="vouchers."+v.id();if(y.contains(p))throw new IllegalStateException("ID collision");y.set(p+".kind",v.kind());y.set(p+".target",v.target());y.set(p+".duration",v.duration());y.set(p+".name",v.name());}write(y);return;}
+  try(var c=connection()){c.setAutoCommit(false);try(var q=c.prepareStatement("INSERT INTO ultimatesmp_temp_vouchers_v1(id,kind,target,duration_ms,custom_name) VALUES(?,?,?,?,?)")){for(var v:vouchers){q.setString(1,v.id().toString());q.setString(2,v.kind());q.setString(3,v.target());q.setLong(4,v.duration());q.setString(5,v.name());q.addBatch();}q.executeBatch();c.commit();}catch(Exception e){c.rollback();throw e;}}
+ }
+ Voucher copyVoucher(UUID source)throws Exception{
+  Voucher fresh;
+  if(url==null){var y=local();String p="vouchers."+source;if(!y.contains(p))throw new IllegalArgumentException("Unknown voucher template");fresh=new Voucher(UUID.randomUUID(),y.getString(p+".kind"),y.getString(p+".target"),y.getLong(p+".duration"),y.getString(p+".name"));}
+  else try(var c=connection();var q=c.prepareStatement("SELECT kind,target,duration_ms,custom_name FROM ultimatesmp_temp_vouchers_v1 WHERE id=?")){q.setString(1,source.toString());try(var r=q.executeQuery()){if(!r.next())throw new IllegalArgumentException("Unknown voucher template");fresh=new Voucher(UUID.randomUUID(),r.getString(1),r.getString(2),r.getLong(3),r.getString(4));}}
+  mint(List.of(fresh));return fresh;
+ }
+ Redemption redeem(UUID voucher,UUID player,long now)throws Exception{
+  if(url==null){var y=local();String p="vouchers."+voucher;if(!y.contains(p)||y.contains(p+".used-by"))return new Redemption(false,null);String kind=Grant.kind(y.getString(p+".kind")),target=y.getString(p+".target");String path="grants."+player+"."+new Grant(kind,target,0).key();long expiry=Grant.extend(y.getLong(path+".expiry"),now,y.getLong(p+".duration"));y.set(path+".kind",kind);y.set(path+".target",target);y.set(path+".expiry",expiry);y.set(p+".used-by",player.toString());y.set(p+".used-at",now);write(y);return new Redemption(true,new Grant(kind,target,expiry));}
+  try(var c=connection()){c.setAutoCommit(false);try{
+   String kind,target;long duration;try(var q=c.prepareStatement("SELECT kind,target,duration_ms,used_by FROM ultimatesmp_temp_vouchers_v1 WHERE id=? FOR UPDATE")){q.setString(1,voucher.toString());try(var r=q.executeQuery()){if(!r.next()||r.getString(4)!=null){c.rollback();return new Redemption(false,null);}kind=Grant.kind(r.getString(1));target=r.getString(2);duration=r.getLong(3);}}
+   try(var q=c.prepareStatement("INSERT IGNORE INTO ultimatesmp_temp_grants_v1(player_id,kind,target,expires_at) VALUES(?,?,?,0)")){q.setString(1,player.toString());q.setString(2,kind);q.setString(3,target);q.executeUpdate();}
+   long current;try(var q=c.prepareStatement("SELECT expires_at FROM ultimatesmp_temp_grants_v1 WHERE player_id=? AND kind=? AND target=? FOR UPDATE")){q.setString(1,player.toString());q.setString(2,kind);q.setString(3,target);try(var r=q.executeQuery()){if(!r.next())throw new SQLException("Grant row missing");current=r.getLong(1);}}
+   long expiry=Grant.extend(current,now,duration);try(var q=c.prepareStatement("UPDATE ultimatesmp_temp_grants_v1 SET expires_at=? WHERE player_id=? AND kind=? AND target=?")){q.setLong(1,expiry);q.setString(2,player.toString());q.setString(3,kind);q.setString(4,target);q.executeUpdate();}
+   try(var q=c.prepareStatement("UPDATE ultimatesmp_temp_vouchers_v1 SET used_by=?,used_at=? WHERE id=?")){q.setString(1,player.toString());q.setLong(2,now);q.setString(3,voucher.toString());q.executeUpdate();}c.commit();return new Redemption(true,new Grant(kind,target,expiry));
+  }catch(Exception e){c.rollback();throw e;}}
+ }
+ List<Grant> active(UUID player,long now)throws Exception{List<Grant> out=new ArrayList<>();if(url==null){var y=local();var section=y.getConfigurationSection("grants."+player);if(section!=null)for(String key:section.getKeys(false)){String p="grants."+player+"."+key;long expiry=y.getLong(p+".expiry");if(expiry>now)out.add(new Grant(Grant.kind(y.getString(p+".kind")),y.getString(p+".target"),expiry));}return out;}try(var c=connection();var q=c.prepareStatement("SELECT kind,target,expires_at FROM ultimatesmp_temp_grants_v1 WHERE player_id=? AND expires_at>?")){q.setString(1,player.toString());q.setLong(2,now);try(var r=q.executeQuery()){while(r.next())out.add(new Grant(Grant.kind(r.getString(1)),r.getString(2),r.getLong(3)));}}return out;}
+}

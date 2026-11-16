@@ -1,4 +1,4 @@
-# UltimateCrates 1.0.0
+# UltimateCrates 1.0.1
 
 Paper 1.21.11 / Java 21. Install the JAR in `plugins/` on both Paper backends and fully restart them. Do not install on Velocity. The plugin recognizes UltimateRanks OWNER/DEV and OP as crate admins; other staff need `ultimatecrates.admin`. Players have `ultimatecrates.use` by default. Placing/registering in `ultimate_spawn` also requires `edit.spawn`.
 
@@ -42,3 +42,6 @@ Without BlinkNetwork, `auto` uses local `plugins/UltimateCrates/crates.yml`. Exp
 ## Verification
 
 CI compiles against Paper 1.21.11 and checks weighted selection boundaries, safe inventory plans, unchanged input stacks, metadata-sensitive merging, template copies, atomic local saves and shared MariaDB revision conflicts. Live Java/Bedrock GUI and right-click gameplay have not been tested. Plugin installation does not automatically register the decorative spawn-world chests.
+
+## Timed voucher rewards
+UltimateTempGrants 1.0.0 is detected dynamically. Its reward templates are materialized into fresh one-use voucher IDs before key consumption. The integration rechecks inventory readiness, the actual key and capacity after issuance. Ordinary item rewards remain synchronous.

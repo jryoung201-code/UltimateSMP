@@ -1,0 +1,53 @@
+name: Build UltimateTempGrants
+on:
+  push:
+    paths: ['ultimate-temp-grants/**', 'ultimate-ranks/**', '.github/workflows/tempgrants.yml']
+  pull_request:
+    paths: ['ultimate-temp-grants/**', 'ultimate-ranks/**', '.github/workflows/tempgrants.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: disposable
+          MARIADB_DATABASE: grants_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd "healthcheck.sh --connect --innodb_initialized"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      TEST_JDBC_URL: jdbc:mariadb://localhost:3306/grants_test
+      TEST_DB_USER: root
+      TEST_DB_PASSWORD: disposable
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Verify voucher redemption and persistence
+        run: mvn -B -ntp -f ultimate-temp-grants/pom.xml verify
+      - name: Verify permanent and temporary rank separation
+        run: |
+          mvn -B -ntp -f ultimate-ranks/pom.xml package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
+          java -cp ultimate-ranks/target/classes:ultimate-ranks/target/test-classes shop.blinksmp.ranks.TemporaryRankTest
+          java -cp "ultimate-ranks/target/classes:ultimate-ranks/target/test-classes:$(cat ultimate-ranks/target/test-classpath)" shop.blinksmp.ranks.MultiRankTest
+      - name: Verify crate voucher integration
+        run: mvn -B -ntp -f ultimate-crates/pom.xml verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateTempGrants-Install-1.0.0
+          path: |
+            ultimate-temp-grants/target/UltimateTempGrants-1.0.0.jar
+            ultimate-ranks/target/UltimateRanks-1.3.2.jar
+            ultimate-crates/target/UltimateCrates-1.0.1.jar
+            ultimate-temp-grants/README.md
+          if-no-files-found: error
