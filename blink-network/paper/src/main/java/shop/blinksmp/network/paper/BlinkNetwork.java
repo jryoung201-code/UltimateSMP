@@ -182,9 +182,7 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
             try {
                 if(p.isDead())p.spigot().respawn();
                 if(s.data==null){
-                    if(!worlds.containsValue(p.getWorld()))throw new IllegalStateException("Import player is outside configured worlds");
-                    Region r=Region.at(dimension(p.getWorld()),p.getX(),p.getZ());if(!id.equals(regions.get(r)))throw new IllegalStateException("Import spawn region must be assigned to this server");
-                    s.data=PlayerSnapshot.captureSource(p,dimension(sourceLocation(p,s).getWorld()),sourceLocation(p,s),isAuxiliaryWorld(p.getWorld())).bytes();s.loaded=true;checkpointInitial(p,s);initialJoinRtp(p,s);return;
+                    initializeLocalPlayer(p,s);return;
                 }
                 PlayerSnapshot snapshot=PlayerSnapshot.decode(s.data);
                 World arrival=Objects.requireNonNull(worlds.get(snapshot.dimension()),"Destination world missing");
@@ -215,6 +213,69 @@ public final class BlinkNetwork extends JavaPlugin implements Listener,CommandEx
                 })).exceptionally(ex->{main(()->p.kickPlayer("Destination chunk could not load."));return null;});
             }catch(Exception ex){problem("Restore rejected; state preserved",ex);p.kickPlayer("Network state needs staff attention.");}
         });
+    }
+    /** Only an empty, already-claimed network record can take this path. Never replace an existing snapshot. */
+    private boolean initialSessionCurrent(Player p,Session s){
+        return active&&ready&&!stopping&&!maintenance&&p.isOnline()&&sessions.get(p.getUniqueId())==s
+            &&!s.closed&&!s.loaded&&!s.transferring&&s.data==null;
+    }
+    private void initializeLocalPlayer(Player p,Session s){
+        if(!initialSessionCurrent(p,s))return;
+        if(worlds.containsValue(p.getWorld())&&safeFloor(p.getLocation())){
+            completeLocalPlayer(p,s,p.getLocation());return;
+        }
+        World normal=worlds.get("Overworld");
+        if(normal==null){initialLandingFailed(p,s,"no configured Overworld");return;}
+        Location spawn=normal.getSpawnLocation();
+        List<TransferSafety.Point> candidates=InitialJoinLanding.candidates(regions,id,spawn.getX(),spawn.getZ(),networkBorders.get("Overworld"));
+        findInitialLanding(p,s,normal,candidates,0);
+    }
+    private void findInitialLanding(Player p,Session s,World normal,List<TransferSafety.Point> candidates,int index){
+        if(!initialSessionCurrent(p,s))return;
+        if(index>=candidates.size()){initialLandingFailed(p,s,"no safe floor found in owned Overworld territory");return;}
+        TransferSafety.Point point=candidates.get(index);
+        // Ownership may have changed since the plan was made. Do not load a foreign chunk.
+        if(!owned(new Location(normal,point.x(),normal.getMinHeight()+1,point.z()))){
+            main(()->findInitialLanding(p,s,normal,candidates,index+1));return;
+        }
+        normal.getChunkAtAsync(((int)Math.floor(point.x()))>>4,((int)Math.floor(point.z()))>>4,true)
+            .whenComplete((chunk,error)->main(()->{
+                if(!initialSessionCurrent(p,s))return;
+                if(error==null&&chunk!=null){
+                    // Stay in this one loaded chunk. Reject liquids, hazards, obstructed feet/head and foreign ownership.
+                    int baseX=(chunk.getX()<<4)+8,baseZ=(chunk.getZ()<<4)+8;
+                    for(int dx:new int[]{0,-4,4})for(int dz:new int[]{0,-4,4}){
+                        for(int y=normal.getMaxHeight()-2;y>normal.getMinHeight();y--){
+                            Location landing=new Location(normal,baseX+dx+0.5,y,baseZ+dz+0.5,p.getYaw(),p.getPitch());
+                            if(safeFloor(landing)){completeLocalPlayer(p,s,landing);return;}
+                        }
+                    }
+                }
+                // Bound the search and yield between chunk loads.
+                getServer().getScheduler().runTask(this,()->findInitialLanding(p,s,normal,candidates,index+1));
+            }));
+    }
+    private void completeLocalPlayer(Player p,Session s,Location landing){
+        if(!initialSessionCurrent(p,s))return;
+        try{
+            if(!safeFloor(landing))throw new IllegalStateException();
+            boolean relocated=!p.getWorld().equals(landing.getWorld())||p.getLocation().distanceSquared(landing)>0.01;
+            if(relocated){
+                restoring.add(p.getUniqueId());boolean moved;
+                try{moved=p.teleport(landing,PlayerTeleportEvent.TeleportCause.PLUGIN);}finally{restoring.remove(p.getUniqueId());}
+                if(!moved||!safeFloor(p.getLocation())){initialLandingFailed(p,s,"initial teleport was cancelled or changed");return;}
+            }
+            s.lastOwned=p.getLocation().clone();
+            // Capture the same local inventory/profiles as before, only after reaching owned ground.
+            s.data=PlayerSnapshot.captureSource(p,dimension(s.lastOwned.getWorld()),s.lastOwned,false).bytes();
+            s.loaded=true;checkpointInitial(p,s);initialJoinRtp(p,s);
+            if(relocated)getLogger().info("Initial join location repaired for "+p.getUniqueId()+" on "+id+"; local inventory retained.");
+        }catch(Exception ex){initialLandingFailed(p,s,"initial snapshot could not be captured");}
+    }
+    private void initialLandingFailed(Player p,Session s,String reason){
+        if(!p.isOnline()||sessions.get(p.getUniqueId())!=s)return;
+        getLogger().warning("Initial join rejected for "+p.getUniqueId()+": "+reason+". Player data retained.");
+        p.kickPlayer("No safe initial Overworld landing is available. Please contact staff.");
     }
     private record AuxiliaryWorld(org.bukkit.plugin.Plugin owner,World world){}
     private final Map<String,AuxiliaryWorld> auxiliaryWorlds=new HashMap<>();
