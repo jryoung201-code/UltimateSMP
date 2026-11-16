@@ -3,6 +3,7 @@ package shop.ultimatesmp.crates;
 import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.function.Predicate;
+import java.util.function.Consumer;
 import org.bukkit.*;
 import org.bukkit.entity.Player;
 import org.bukkit.event.*;
@@ -38,8 +39,12 @@ final class CrateReveal implements Listener {
     private final Predicate<Player> ready;
     private final Map<UUID,Session> sessions=new HashMap<>();
     private final int frames;
+    private final Consumer<Player> tickSound;
     CrateReveal(JavaPlugin plugin,Predicate<Player> ready,int seconds) {
-        this.plugin=plugin;this.ready=ready;frames=Math.max(0,Math.min(10,seconds))*10;
+        this(plugin,ready,seconds,p->p.playSound(p.getLocation(),Sound.BLOCK_NOTE_BLOCK_HAT,.25f,1.1f));
+    }
+    CrateReveal(JavaPlugin plugin,Predicate<Player> ready,int seconds,Consumer<Player> tickSound) {
+        this.plugin=plugin;this.ready=ready;this.tickSound=tickSound;frames=Math.max(0,Math.min(10,seconds))*10;
     }
     boolean active(UUID id) { return sessions.containsKey(id); }
     void start(Player player,Crate crate,ItemStack prize,Runnable notify) {
@@ -69,7 +74,7 @@ final class CrateReveal implements Listener {
         for(int slot=9;slot<17;slot++)session.screen.inventory.setItem(slot,session.screen.inventory.getItem(slot+1));
         int index=LootPolicy.choose(session.crate.rewards(),ThreadLocalRandom.current().nextDouble());
         session.screen.inventory.setItem(17,session.crate.rewards().get(index).item().clone());
-        if(session.frame%3==0)player.playSound(player.getLocation(),Sound.BLOCK_NOTE_BLOCK_HAT,.25f,1.1f);
+        if(session.frame%3==0)tickSound.accept(player);
     }
     private static ItemStack displayPrize(ItemStack original) {
         ItemStack copy=original.clone();ItemMeta meta=copy.getItemMeta();
