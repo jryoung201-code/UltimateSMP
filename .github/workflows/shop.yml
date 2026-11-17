@@ -24,6 +24,8 @@ jobs:
           --health-retries 15
     env:
       TEST_JDBC_URL: jdbc:mariadb://localhost:3306/shop_test
+      TEST_DB_USER: root
+      TEST_DB_PASSWORD: disposable
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4

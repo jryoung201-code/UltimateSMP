@@ -66,7 +66,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
             });}catch(Exception e){main(()->delivering.remove(player.getUniqueId()));getLogger().warning("Key delivery claim unavailable; delivery remains pending or held for review.");}});return;
         }
     }
-    private void finishDelivery(Player p,ShopStore.Delivery d,String claim,boolean given){io.execute(()->{try{store.finish(d.id(),claim,given);main(()->{delivering.remove(p.getUniqueId());if(given&&Bukkit.getPlayer(p.getUniqueId())==p)p.sendMessage("[UltimateShop] Delivered "+d.amount()+" "+d.pack()+" key(s).");});}catch(Exception e){main(()->delivering.remove(p.getUniqueId()));getLogger().severe("Key delivery "+d.id()+" acknowledgement failed. Review before retrying; no automatic duplicate grant.");}});}
+    private void finishDelivery(Player p,ShopStore.Delivery d,String claim,boolean given){io.execute(()->{try{store.finish(d.id(),claim,given);main(()->{delivering.remove(p.getUniqueId());if(given&&Bukkit.getPlayer(p.getUniqueId())==p)p.sendMessage("[UltimateShop] Delivered "+d.amount()+" "+d.pack().substring(4)+" key(s).");});}catch(Exception e){main(()->delivering.remove(p.getUniqueId()));getLogger().severe("Key delivery "+d.id()+" acknowledgement failed. Review before retrying; no automatic duplicate grant.");}});}
     @Override public boolean onCommand(CommandSender s,Command command,String label,String[] args){
         if(command.getName().equals("shop")){
             if(!(s instanceof Player p)){s.sendMessage("Players: /shop. Console: /ultimateshop give <player|uuid> <package> [days]");return true;}
