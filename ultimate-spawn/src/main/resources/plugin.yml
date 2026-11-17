@@ -1,11 +1,15 @@
 name: UltimateSpawn
-version: 1.0.0
+version: 1.1.0
 main: shop.ultimatesmp.spawn.UltimateSpawn
 api-version: '1.21.11'
 depend: [BlinkNetwork]
 softdepend: [UltimateRanks]
 author: Aven
 commands:
+  duel:
+    description: Challenge a player at spawn, or accept, deny, cancel and leave duels
+    permission: ultimatespawn.duel
+    usage: /duel <player|accept|deny|cancel|leave>
   spawn:
     description: Travel to the protected network spawn world
     permission: ultimatespawn.use
@@ -13,8 +17,12 @@ commands:
     description: Set the arrival point inside the spawn world
     permission: edit.spawn
 permissions:
+  ultimatespawn.duel:
+    description: Request and accept duels inside spawn
+    default: true
   ultimatespawn.use:
     default: true
   edit.spawn:
     description: Edit the protected spawn world and set its arrival point
     default: false
+

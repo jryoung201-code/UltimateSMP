@@ -2,7 +2,7 @@ package shop.ultimatesmp.spawn;
 import com.zaxxer.hikari.*;import java.lang.reflect.*;import java.util.*;import java.util.concurrent.*;import java.util.concurrent.atomic.AtomicBoolean;
 import org.bukkit.*;import org.bukkit.command.*;import org.bukkit.entity.Player;import org.bukkit.event.*;import org.bukkit.event.entity.EntityDamageEvent;import org.bukkit.event.player.*;import org.bukkit.plugin.java.JavaPlugin;
 public final class UltimateSpawn extends JavaPlugin implements Listener {
- private JavaPlugin network;private Method ready,travel;private World spawnWorld;private String id,host,worldName,url,user,password;
+ private SpawnDuels duels;private JavaPlugin network;private Method ready,travel;private World spawnWorld;private String id,host,worldName,url,user,password;
  private final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"UltimateSpawn-DB");t.setDaemon(true);return t;});private final AtomicBoolean initializing=new AtomicBoolean();private volatile boolean stopping;private HikariDataSource pool;private volatile SpawnStore store;
  private final Map<UUID,UUID> loading=new HashMap<>();private final Map<UUID,Warmup> warming=new HashMap<>();private final Map<UUID,Long> cooldown=new HashMap<>();private int warmupSeconds,cooldownSeconds;private volatile SpawnPoint lastPoint;private final Set<UUID> rescuing=new HashSet<>();
  private record Warmup(Player player,Location origin,SpawnPoint point,long due){}
@@ -19,8 +19,14 @@ public final class UltimateSpawn extends JavaPlugin implements Listener {
    network.getClass().getMethod("registerAuxiliaryWorld",org.bukkit.plugin.Plugin.class,World.class).invoke(network,this,spawnWorld);
   }
   Bukkit.getPluginManager().registerEvents(this,this);Bukkit.getPluginManager().registerEvents(new SpawnProtection(w->w==spawnWorld),this);
+  duels=new SpawnDuels(this,spawnWorld);getCommand("duel").setExecutor(duels);getCommand("duel").setTabCompleter(duels);
   Bukkit.getScheduler().runTaskTimer(this,this::pulse,5,5);Bukkit.getScheduler().runTaskTimer(this,this::initialize,1,200);getLogger().info("Spawn host: "+host+"; world: "+worldName+". Editing requires edit.spawn.");
  }catch(Exception ex){getLogger().severe("Spawn setup failed ("+ex.getClass().getSimpleName()+"). Requires BlinkNetwork 0.5.3, a separate world and the shared MariaDB database.");Bukkit.getPluginManager().disablePlugin(this);}}
+ boolean activityNetworkReady(Player p){try{return p.isOnline()&&!p.isDead()&&(Boolean)ready.invoke(network,p);}catch(Exception ex){return false;}}
+ boolean activityReady(Player p){return ready(p)&&!loading.containsKey(p.getUniqueId())&&!warming.containsKey(p.getUniqueId())&&!rescuing.contains(p.getUniqueId());}
+ Location activitySpawn(){SpawnPoint point=lastPoint;if(spawnWorld==null||store==null||point==null||!point.server().equals(id)||!point.world().equals(worldName))return null;Location l=new Location(spawnWorld,point.x(),point.y(),point.z(),point.yaw(),point.pitch());return safe(l)?l:null;}
+ void registerActivityWorld(World w)throws Exception{network.getClass().getMethod("registerAuxiliaryWorld",org.bukkit.plugin.Plugin.class,World.class).invoke(network,this,w);}
+ CompletableFuture<Boolean> activityTravel(Player p,Location to){try{if(!activityNetworkReady(p)||to==null)return CompletableFuture.completedFuture(false);@SuppressWarnings("unchecked") CompletableFuture<Boolean> future=(CompletableFuture<Boolean>)travel.invoke(network,p,id,to.getWorld().getName(),to.getX(),to.getY(),to.getZ(),to.getYaw(),to.getPitch());return future;}catch(Exception ex){return CompletableFuture.completedFuture(false);}}
  private String env(String key,String path){String value=System.getenv(key);return value==null||value.isBlank()?network.getConfig().getString(path,""):value;}
  private void main(Runnable action){if(!stopping&&isEnabled())Bukkit.getScheduler().runTask(this,()->{if(!stopping)action.run();});}
  private boolean ready(Player p){try{return p.isOnline()&&!p.isDead()&&!p.isSleeping()&&!p.isInsideVehicle()&&p.getPassengers().isEmpty()&&(Boolean)ready.invoke(network,p);}catch(Exception ex){return false;}}
@@ -58,5 +64,6 @@ public final class UltimateSpawn extends JavaPlugin implements Listener {
   try{@SuppressWarnings("unchecked") CompletableFuture<Boolean> future=(CompletableFuture<Boolean>)travel.invoke(network,p,host,worldName,point.x(),point.y(),point.z(),point.yaw(),point.pitch());future.whenComplete((ok,error)->main(()->rescuing.remove(p.getUniqueId())));}catch(Exception ex){rescuing.remove(p.getUniqueId());}
  }
  @EventHandler public void quit(PlayerQuitEvent e){UUID id=e.getPlayer().getUniqueId();loading.remove(id);warming.remove(id);cooldown.remove(id);rescuing.remove(id);}
- @Override public void onDisable(){stopping=true;Bukkit.getScheduler().cancelTasks(this);io.shutdown();try{io.awaitTermination(2,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}if(pool!=null)pool.close();io.shutdownNow();warming.clear();loading.clear();}
+ @Override public void onDisable(){if(duels!=null)duels.shutdown();stopping=true;Bukkit.getScheduler().cancelTasks(this);io.shutdown();try{io.awaitTermination(2,TimeUnit.SECONDS);}catch(InterruptedException ex){Thread.currentThread().interrupt();}if(pool!=null)pool.close();io.shutdownNow();warming.clear();loading.clear();}
 }
+
