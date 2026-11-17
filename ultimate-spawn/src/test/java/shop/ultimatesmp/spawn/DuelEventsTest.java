@@ -1,0 +1,13 @@
+package shop.ultimatesmp.spawn;
+import java.util.*;import java.lang.reflect.Field;
+import org.junit.jupiter.api.Test;import static org.mockito.Mockito.*;import org.bukkit.*;import org.bukkit.configuration.file.YamlConfiguration;import org.bukkit.entity.Player;import org.bukkit.event.player.*;
+class DuelEventsTest {
+ @SuppressWarnings("unchecked") private static <T>T field(SpawnDuels duels,String name)throws Exception{Field f=SpawnDuels.class.getDeclaredField(name);f.setAccessible(true);return (T)f.get(duels);}
+ private static SpawnDuels service(UltimateSpawn plugin){when(plugin.getConfig()).thenReturn(new YamlConfiguration());return new SpawnDuels(plugin,null);}
+ private static Player player(){Player p=mock(Player.class);when(p.getUniqueId()).thenReturn(UUID.randomUUID());return p;}
+ private static void protect(SpawnDuels d,Player p)throws Exception{Map<UUID,DuelVitals> saved=field(d,"saved");saved.put(p.getUniqueId(),new DuelVitals(20,20,5,0,0,1,List.of()));}
+ @Test void pendingReturnDoesNotBlockAuthoritativeLoginRestore()throws Exception{UltimateSpawn plugin=mock(UltimateSpawn.class);SpawnDuels d=service(plugin);Player p=player();protect(d,p);Set<UUID> returning=field(d,"returning");returning.add(p.getUniqueId());when(plugin.activityNetworkReady(p)).thenReturn(false);PlayerTeleportEvent event=mock(PlayerTeleportEvent.class);when(event.getPlayer()).thenReturn(p);d.teleport(event);verify(event,never()).setCancelled(true);}
+ @Test void fullyLoadedPlayerCannotTeleportOutBeforeReturnCompletes()throws Exception{UltimateSpawn plugin=mock(UltimateSpawn.class);SpawnDuels d=service(plugin);Player p=player();protect(d,p);Set<UUID> returning=field(d,"returning");returning.add(p.getUniqueId());when(plugin.activityNetworkReady(p)).thenReturn(true);PlayerTeleportEvent event=mock(PlayerTeleportEvent.class);when(event.getPlayer()).thenReturn(p);d.teleport(event);verify(event).setCancelled(true);}
+ @Test void internalArenaAndReturnTeleportsAreNotCancelledByMovementFreeze()throws Exception{UltimateSpawn plugin=mock(UltimateSpawn.class);SpawnDuels d=service(plugin);Player p=player();protect(d,p);Set<UUID> moving=field(d,"moving");moving.add(p.getUniqueId());PlayerTeleportEvent event=mock(PlayerTeleportEvent.class);when(event.getPlayer()).thenReturn(p);d.move(event);d.teleport(event);verify(event,never()).setCancelled(true);}
+ @Test void failedStartupCannotOverwriteAnUnreadableReturnJournal()throws Exception{UltimateSpawn plugin=mock(UltimateSpawn.class);SpawnDuels d=service(plugin);DuelReturnStore disk=mock(DuelReturnStore.class);Field f=SpawnDuels.class.getDeclaredField("disk");f.setAccessible(true);f.set(d,disk);d.shutdown();verify(disk,never()).save(anyMap());}
+}
