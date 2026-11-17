@@ -1,0 +1,40 @@
+name: Build spawn duels
+on:
+  push:
+    paths: ['ultimate-spawn/**', '.github/workflows/duels.yml']
+  pull_request:
+    paths: ['ultimate-spawn/**', '.github/workflows/duels.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  duels:
+    runs-on: ubuntu-latest
+    services:
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: disposable
+          MARIADB_DATABASE: spawn_test
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized"
+          --health-interval=5s --health-timeout=5s --health-retries=15
+    env:
+      TEST_SPAWN_JDBC: jdbc:mariadb://127.0.0.1:3306/spawn_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Test spawn, duel consent, timers and restart returns
+        run: mvn -B -ntp -f ultimate-spawn/pom.xml verify
+      - uses: actions/upload-artifact@v4
+        with:
+          name: UltimateSpawn-1.1.0
+          path: |
+            ultimate-spawn/target/UltimateSpawn-1.1.0.jar
+            ultimate-spawn/README.md
+          if-no-files-found: error

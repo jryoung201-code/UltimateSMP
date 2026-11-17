@@ -33,3 +33,4 @@ public final class SpawnProtection implements Listener {
   if(locked(e.getPlayer(),e.getPlayer().getWorld())&&(java.util.Set.of("fill","setblock","clone","place","execute","worldborder","gamerule","setworldspawn","weather","time").contains(label)||label.startsWith("/")||label.equals("worldedit")||label.equals("we"))){e.setCancelled(true);e.getPlayer().sendMessage("You need edit.spawn to edit the spawn world.");}
  }
 }
+

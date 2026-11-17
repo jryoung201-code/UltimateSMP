@@ -8,3 +8,4 @@ final class SpawnStore {
   try(var c=source.getConnection();var q=c.prepareStatement("INSERT INTO "+TABLE+"(id,server_id,world_name,x,y,z,yaw,pitch) VALUES(1,?,?,?,?,?,?,?) ON DUPLICATE KEY UPDATE "+tail)){q.setString(1,p.server());q.setString(2,p.world());q.setDouble(3,p.x());q.setDouble(4,p.y());q.setDouble(5,p.z());q.setFloat(6,p.yaw());q.setFloat(7,p.pitch());q.executeUpdate();}}
  SpawnPoint load()throws SQLException{try(var c=source.getConnection();var q=c.createStatement();var r=q.executeQuery("SELECT * FROM "+TABLE+" WHERE id=1")){return r.next()?new SpawnPoint(r.getString("server_id"),r.getString("world_name"),r.getDouble("x"),r.getDouble("y"),r.getDouble("z"),r.getFloat("yaw"),r.getFloat("pitch")):null;}}
 }
+
