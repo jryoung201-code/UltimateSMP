@@ -27,8 +27,8 @@ prefixes:
 # Never grants OP or wildcard '*'.
 # Use /rank reload after editing. Existing rank names and staff hierarchy stay fixed.
 extra-permissions:
-  OWNER: [ultimateoptimize.admin, edit.spawn]
-  DEV: [ultimateoptimize.admin, edit.spawn]
+  OWNER: [ultimateoptimize.admin, edit.spawn, ultimateshop.admin]
+  DEV: [ultimateoptimize.admin, edit.spawn, ultimateshop.admin]
   ADMIN: [ultimateoptimize.admin]
   MOD: []
   TRIAL_MOD: []
@@ -45,3 +45,4 @@ extra-permissions:
 # Migration marker: after upgrading, removing edit.spawn from a role is respected.
 migrations:
   spawn-edit-permission: true
+
