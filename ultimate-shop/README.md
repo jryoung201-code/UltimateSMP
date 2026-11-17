@@ -1,6 +1,8 @@
-# UltimateShop 1.0.0 — Paper 1.21.11 / Java 21
+See **KEYS-AND-PRICES.md** for the /#store/admin price editor and key support.
 
-Install **UltimateShop-1.0.0.jar** and replace UltimateRanks with **UltimateRanks-1.3.3.jar** on **every Paper gameplay backend**, not Velocity. Preserve existing plugin folders. Fully restart; no /reload. Shared MariaDB/MySQL is required. The plugin inherits BlinkNetwork's JDBC URL, username and password, including its BLINK_NETWORK_* environment overrides. Existing network tables and inventory snapshots are not modified.
+# UltimateShop 1.1.0 — Paper 1.21.11 / Java 21
+
+Install **UltimateShop-1.1.0.jar** and replace UltimateRanks with **UltimateRanks-1.3.3.jar** on **every Paper gameplay backend**, not Velocity. Preserve existing plugin folders. Fully restart; no /reload. Shared MariaDB/MySQL is required. The plugin inherits BlinkNetwork's JDBC URL, username and password, including its BLINK_NETWORK_* environment overrides. Existing network tables and inventory snapshots are not modified.
 
 The website integration lives in `jryoung201-code/BlinkSMP-Eco-Plugin`, `server-switcher/transfer-api/shop/`. Its schema.sql matches the plugin's schema.sql. UltimateShop initializes the separate `ultimate_shop_*` tables. The website must use this same database. No new public Minecraft ports or RCON are needed.
 
@@ -25,9 +27,9 @@ ultimateshop status RealJR_25736
 
 ## Packages and rank behavior
 
-Website paid memberships remain Ultimate++ ($9.99 USD monthly, five homes) and Ultimate+++ ($14.99 USD monthly, nine homes). Ultimate+ remains a staff-verified Discord boost reward; the console can grant `ultimate-plus`. No automatic Discord integration is added.
+Default website paid memberships are Ultimate++ ($9.99 USD monthly, five homes) and Ultimate+++ ($14.99 USD monthly, nine homes). Ultimate+ remains a staff-verified Discord boost reward; the console can grant `ultimate-plus`. No automatic Discord integration is added.
 
-One-time contributions of $5/$10/$25/$50/$100/$150/$250/$500 accumulate toward the existing eight Supporter milestones. The highest reached milestone is granted; refunded amounts and disputed payments do not count. Contributions do not include gameplay benefits. Shop package ranks never grant staff authority or OP. This version delivers **rank packages and supporter recognition**, not physical crate keys/items or arbitrary website-supplied commands.
+One-time contributions of $5/$10/$25/$50/$100/$150/$250/$500 accumulate toward the existing eight Supporter milestones. The highest reached milestone is granted; refunded amounts and disputed payments do not count. Contributions do not include gameplay benefits. Shop package ranks never grant staff authority or OP. This version also delivers Common, Uncommon, Rare and Legendary keys through UltimateCrates 1.2.2+. See KEYS-AND-PRICES.md for installation, the price editor, and delivery recovery. Website-supplied commands are never executed.
 
 UltimateRanks 1.3.3 has an independent shop overlay alongside permanent ranks and temporary voucher ranks. Permissions combine, and the highest configured weight controls the chat/TAB tag. Shop ranks are not exported into permanent network rank assignments. Membership expiry is checked every second even if the shop database is temporarily unavailable. Removing shop access does not remove a separately granted permanent/voucher copy of the same rank. Recognition defaults below membership and staff weights; configure prefixes/weights in UltimateRanks. Every backend must run matching package mappings and rank configs.
 

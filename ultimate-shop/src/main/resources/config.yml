@@ -23,3 +23,10 @@ packages:
   ultimate-supporter-plus: ULTIMATE_SUPPORTER_PLUS
   ultimate-supporter-plus-plus: ULTIMATE_SUPPORTER_PLUS_PLUS
   ultimate-supporter-plus-plus-plus: ULTIMATE_SUPPORTER_PLUS_PLUS_PLUS
+
+# Website key product -> shared UltimateCrates crate ID. Crates must exist first.
+key-packages:
+  key-common: common
+  key-uncommon: uncommon
+  key-rare: rare
+  key-legendary: legendary
