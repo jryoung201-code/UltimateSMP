@@ -10,3 +10,4 @@ record LabelStyle(String text,String color,float size,double height,boolean visi
  Component component(String name){return Component.empty().color(parseColor(color)).append(LegacyComponentSerializer.legacyAmpersand().deserialize(text.replace("{name}",name).replace("\\n","\n")));}
  LabelStyle text(String v){return new LabelStyle(v,color,size,height,visible);}LabelStyle color(String v){return new LabelStyle(text,v,size,height,visible);}LabelStyle size(float v){return new LabelStyle(text,color,v,height,visible);}LabelStyle height(double v){return new LabelStyle(text,color,size,v,visible);}LabelStyle visible(boolean v){return new LabelStyle(text,color,size,height,v);}
 }
+

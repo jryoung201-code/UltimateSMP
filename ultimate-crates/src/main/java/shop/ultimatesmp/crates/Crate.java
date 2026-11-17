@@ -6,3 +6,4 @@ record Crate(String id,String name,long revision,List<Reward> rewards,LabelStyle
  record Reward(ItemStack item,int weight,LootPolicy.Rarity rarity,Double chance){Reward(ItemStack item,int weight){this(item,weight,LootPolicy.Rarity.LEGACY,null);}Reward{Objects.requireNonNull(rarity);if(chance!=null&&(!Double.isFinite(chance)||chance<0||chance>100))throw new IllegalArgumentException("Chance must be 0-100%");if(InventoryGrant.empty(item)||item.getAmount()<1||item.getAmount()>item.getMaxStackSize()||weight<1||weight>1000000)throw new IllegalArgumentException("Invalid reward or weight");item=item.clone();}}
  static int select(List<Integer> weights,long ticket){long total=0;for(int w:weights){if(w<1)throw new IllegalArgumentException();total+=w;}if(ticket<0||ticket>=total)throw new IllegalArgumentException();for(int i=0;i<weights.size();i++){ticket-=weights.get(i);if(ticket<0)return i;}throw new IllegalStateException();}
 }
+

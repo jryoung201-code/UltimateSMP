@@ -13,3 +13,4 @@ final class CrateStore {
  }
  private long revision(String payload)throws Exception{var y=new YamlConfiguration();y.loadFromString(payload);return y.getLong("revision");}
 }
+
