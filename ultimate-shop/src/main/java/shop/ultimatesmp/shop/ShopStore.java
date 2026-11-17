@@ -9,7 +9,7 @@ import java.security.MessageDigest;
 public final class ShopStore {
     private final String url,user,password;
     public ShopStore(String url,String user,String password){this.url=url;this.user=user;this.password=password;}
-    private Connection connect() throws SQLException {var p=new Properties();p.setProperty("user",user);p.setProperty("password",password);p.setProperty("connectTimeout","10000");p.setProperty("socketTimeout","15000");return DriverManager.getConnection(url,p);}
+    private Connection connect() throws SQLException {var p=new Properties();p.setProperty("user",user);p.setProperty("password",password);p.setProperty("connectTimeout","10000");p.setProperty("socketTimeout","15000");return new org.mariadb.jdbc.Driver().connect(url,p);}
     public void initialize() throws Exception {
         try(var c=connect();var s=c.createStatement();var in=ShopStore.class.getResourceAsStream("/schema.sql")){
             for(String sql:new String(Objects.requireNonNull(in).readAllBytes(),StandardCharsets.UTF_8).split(";"))if(!sql.isBlank())s.execute(sql);

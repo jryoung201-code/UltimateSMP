@@ -34,7 +34,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
             store=new ShopStore(url.replaceFirst("^jdbc:mysql:","jdbc:mariadb:"),user,password);
             Bukkit.getPluginManager().registerEvents(this,this);getCommand("shop").setTabCompleter(this);getCommand("ultimateshop").setTabCompleter(this);
             Bukkit.getScheduler().runTaskTimer(this,this::poll,1,20L*Math.max(5,getConfig().getInt("poll-seconds",10)));
-            io.execute(()->{try{store.initialize();ready=true;getLogger().info("Shared UltimateShop records ready.");}catch(Exception e){getLogger().severe("Shop database setup failed ("+e.getClass().getSimpleName()+"). Check JDBC settings; no purchases granted.");}});
+            polling.set(true);io.execute(()->{try{store.initialize();ready=true;getLogger().info("Shared UltimateShop records ready.");}catch(Exception e){getLogger().severe("Shop database setup failed ("+e.getClass().getSimpleName()+"). Check JDBC settings; no purchases granted.");}finally{polling.set(false);}});
         }catch(Exception e){getLogger().severe("Cannot enable UltimateShop: "+e.getMessage());Bukkit.getPluginManager().disablePlugin(this);}
     }
     private void loadPackages() throws Exception {
@@ -47,7 +47,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
     private boolean usable(Player p){if(!p.isOnline())return false;if(network==null)return true;try{return network.isEnabled()&&(Boolean)network.getClass().getMethod("isPlayerReady",Player.class).invoke(network,p);}catch(Exception e){return false;}}
     private void main(Runnable r){if(!stopping)Bukkit.getScheduler().runTask(this,()->{if(!stopping)r.run();});}
     private void apply(Player p,Map<String,Long> values){if(!usable(p))return;Map<String,Long> rankValues=new HashMap<>();values.forEach((key,end)->{String rank=packages.get(key);if(rank!=null)rankValues.merge(rank,end,Math::max);});try{ranks.getClass().getMethod("setShopRankExpiries",UUID.class,Map.class).invoke(ranks,p.getUniqueId(),rankValues);}catch(Exception e){getLogger().severe("Rank integration failed; install UltimateRanks 1.3.3+.");}}
-    private void poll(){if(!ready||!polling.compareAndSet(false,true))return;var players=Bukkit.getOnlinePlayers().stream().filter(this::usable).toList();io.execute(()->{try{store.heartbeat(backend);for(Player p:players){var values=store.read(p.getUniqueId(),p.getName());main(()->{if(Bukkit.getPlayer(p.getUniqueId())==p)apply(p,values);});}}catch(Exception e){getLogger().warning("Shop sync unavailable ("+e.getClass().getSimpleName()+"); existing ranks retain their original expiry.");}finally{polling.set(false);}});}
+    private void poll(){if(stopping||store==null||!polling.compareAndSet(false,true))return;var players=Bukkit.getOnlinePlayers().stream().filter(this::usable).toList();io.execute(()->{try{if(!ready){store.initialize();ready=true;}store.heartbeat(backend);for(Player p:players){var values=store.read(p.getUniqueId(),p.getName());main(()->{if(Bukkit.getPlayer(p.getUniqueId())==p)apply(p,values);});}}catch(Exception e){getLogger().warning("Shop sync unavailable ("+e.getClass().getSimpleName()+"); existing ranks retain their original expiry.");}finally{polling.set(false);}});}
     @Override public boolean onCommand(CommandSender s,Command command,String label,String[] args){
         if(command.getName().equals("shop")){
             if(!(s instanceof Player p)){s.sendMessage("Players: /shop. Console: /ultimateshop give <player|uuid> <package> [days]");return true;}
