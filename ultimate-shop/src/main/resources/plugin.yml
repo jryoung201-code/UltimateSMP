@@ -1,0 +1,16 @@
+name: UltimateShop
+version: 1.0.0
+main: shop.ultimatesmp.shop.UltimateShop
+api-version: '1.21.11'
+depend: [UltimateRanks]
+softdepend: [BlinkNetwork]
+commands:
+  shop:
+    description: Link your Minecraft account to the website shop
+    usage: /shop
+  ultimateshop:
+    description: Manage shared shop rank packages
+    usage: /ultimateshop <give|revoke|status|reload>
+permissions:
+  ultimateshop.admin:
+    default: op

@@ -51,6 +51,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
             Bukkit.getPluginManager().disablePlugin(this); return;
         }
         applyRankSettings(getConfig());
+        Bukkit.getScheduler().runTaskTimer(this,this::expireShopRanks,20,20);
         bindSettings();
         Bukkit.getPluginManager().registerEvents(this,this);
         for(String cmd:getDescription().getCommands().keySet()) Objects.requireNonNull(getCommand(cmd)).setTabCompleter(this);
@@ -83,7 +84,21 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
 
     private final Map<UUID,Map<Rank,Long>> temporaryRanks=new ConcurrentHashMap<>();
-    private Set<Rank> effectiveRanks(UUID id){return TemporaryRankPolicy.combine(store.get(id).ranks(),temporaryRanks.getOrDefault(id,Map.of()),System.currentTimeMillis());}
+    private final Map<UUID,Map<Rank,Long>> shopRanks=new ConcurrentHashMap<>();
+    private Set<Rank> effectiveRanks(UUID id){return TemporaryRankPolicy.combine(TemporaryRankPolicy.combine(store.get(id).ranks(),temporaryRanks.getOrDefault(id,Map.of()),System.currentTimeMillis()),shopRanks.getOrDefault(id,Map.of()),System.currentTimeMillis());}
+    /** Independent store overlay: never replaces permanent or voucher ranks. */
+    public void setShopRankExpiries(UUID id,Map<String,Long> values){
+        if(!Bukkit.isPrimaryThread())throw new IllegalStateException("Use main thread");
+        Map<Rank,Long> next=new EnumMap<>(Rank.class);values.forEach((key,expiry)->{Rank r=Rank.parse(key);if(r.level!=0||r==Rank.MEMBER)throw new IllegalArgumentException("Shop cannot grant staff ranks");if(expiry>System.currentTimeMillis())next.put(r,expiry);});
+        if(next.equals(shopRanks.getOrDefault(id,Map.of())))return;
+        if(next.isEmpty())shopRanks.remove(id);else shopRanks.put(id,Map.copyOf(next));Player p=Bukkit.getPlayer(id);if(p!=null)refresh(p);
+    }
+    private void expireShopRanks(){
+        long now=System.currentTimeMillis();
+        for(var row:shopRanks.entrySet())if(row.getValue().values().stream().anyMatch(end->end<=now)){
+            Map<String,Long> live=new HashMap<>();row.getValue().forEach((rank,end)->{if(end>now)live.put(rank.name(),end);});setShopRankExpiries(row.getKey(),live);
+        }
+    }
     private Rank rank(UUID id) { return effectiveRanks(id).stream().max(Comparator.comparingInt(r->r.level)).orElse(Rank.MEMBER); }
     /** Trusted plugin API; expiry overlays are never exported as permanent rank assignments. */
     public void setTemporaryRankExpiries(UUID id,Map<String,Long> values){
@@ -492,7 +507,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
     }
     @EventHandler public void quit(PlayerQuitEvent event) {
         UUID id=event.getPlayer().getUniqueId();
-        temporaryRanks.remove(id);
+        temporaryRanks.remove(id);shopRanks.remove(id);
         if(vanished.remove(id)) {
             event.quitMessage(null);
             event.getPlayer().removeMetadata("vanished",this);refreshHiddenNames();
@@ -574,6 +589,7 @@ public final class UltimateRanks extends JavaPlugin implements Listener, TabComp
         return candidates.stream().filter(v->v.toLowerCase(Locale.ROOT).startsWith(partial)).sorted().toList();
     }
 }
+
 
 
 

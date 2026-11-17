@@ -4,6 +4,8 @@ import java.util.*;
 
 public enum Rank {
     MEMBER(0, "&7"), ULTIMATE_PLUS(0, "&b", 3), ULTIMATE_PLUS_PLUS(0, "&d", 5), ULTIMATE_PLUS_PLUS_PLUS(0, "&6", 9),
+    SUPPORTER(0,"&7"), SUPPORTER_PLUS(0,"&a"), SUPPORTER_PLUS_PLUS(0,"&b"), SUPPORTER_PLUS_PLUS_PLUS(0,"&d"),
+    ULTIMATE_SUPPORTER(0,"&6"), ULTIMATE_SUPPORTER_PLUS(0,"&6"), ULTIMATE_SUPPORTER_PLUS_PLUS(0,"&e"), ULTIMATE_SUPPORTER_PLUS_PLUS_PLUS(0,"&e"),
     HELPER(1, "&a"), TRIAL_MOD(2, "&e"), MOD(3, "&2"),
     ADMIN(4, "&c"), DEV(5, "&b"), OWNER(6, "&4");
     public final int level;
@@ -16,11 +18,20 @@ public enum Rank {
             case ULTIMATE_PLUS -> "Ultimate+";
             case ULTIMATE_PLUS_PLUS -> "Ultimate++";
             case ULTIMATE_PLUS_PLUS_PLUS -> "Ultimate+++";
+            case SUPPORTER -> "Supporter";
+            case SUPPORTER_PLUS -> "Supporter+";
+            case SUPPORTER_PLUS_PLUS -> "Supporter++";
+            case SUPPORTER_PLUS_PLUS_PLUS -> "Supporter+++";
+            case ULTIMATE_SUPPORTER -> "UltimateSupporter";
+            case ULTIMATE_SUPPORTER_PLUS -> "UltimateSupporter+";
+            case ULTIMATE_SUPPORTER_PLUS_PLUS -> "UltimateSupporter++";
+            case ULTIMATE_SUPPORTER_PLUS_PLUS_PLUS -> "UltimateSupporter+++";
             default -> name().replace('_',' ');
         };
     }
     public int defaultWeight() { return switch(this) {
         case MEMBER -> 0; case ULTIMATE_PLUS -> 10; case ULTIMATE_PLUS_PLUS -> 20; case ULTIMATE_PLUS_PLUS_PLUS -> 30;
+        case SUPPORTER, SUPPORTER_PLUS, SUPPORTER_PLUS_PLUS, SUPPORTER_PLUS_PLUS_PLUS, ULTIMATE_SUPPORTER, ULTIMATE_SUPPORTER_PLUS, ULTIMATE_SUPPORTER_PLUS_PLUS, ULTIMATE_SUPPORTER_PLUS_PLUS_PLUS -> ordinal()-3;
         default -> level*100;
     }; }
     /** Display weights never change staff authority. Ties use the stable enum order. */
@@ -42,4 +53,5 @@ public enum Rank {
         return valueOf(key);
     }
 }
+
 

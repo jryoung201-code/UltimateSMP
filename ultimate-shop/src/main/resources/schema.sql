@@ -1,0 +1,10 @@
+CREATE TABLE IF NOT EXISTS ultimate_shop_links (token_hash CHAR(64) PRIMARY KEY, player_id CHAR(36) NOT NULL, player_name VARCHAR(64) NOT NULL, expires BIGINT NOT NULL, INDEX(expires)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_players (player_id CHAR(36) PRIMARY KEY, player_name VARCHAR(64) NOT NULL, updated_at BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_grants (source VARCHAR(128) PRIMARY KEY, player_id CHAR(36) NOT NULL, package_id VARCHAR(64) NOT NULL, expires BIGINT NOT NULL, INDEX(player_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_blocks (player_id CHAR(36) NOT NULL, package_id VARCHAR(64) NOT NULL, PRIMARY KEY(player_id,package_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_state (id INT PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+INSERT IGNORE INTO ultimate_shop_state(id) VALUES(1);
+CREATE TABLE IF NOT EXISTS ultimate_shop_orders (id CHAR(36) PRIMARY KEY, player_id CHAR(36) NOT NULL, package_id VARCHAR(64) NOT NULL, created_at BIGINT NOT NULL, expires BIGINT NOT NULL, session_id VARCHAR(128) UNIQUE, customer_id VARCHAR(128), subscription_id VARCHAR(128), INDEX(player_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_payments (session_id VARCHAR(128) PRIMARY KEY, player_id CHAR(36) NOT NULL, package_id VARCHAR(64) NOT NULL, amount INT NOT NULL, refunded INT NOT NULL DEFAULT 0, disputed TINYINT NOT NULL DEFAULT 0, payment_intent VARCHAR(128) UNIQUE, INDEX(player_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_events (id VARCHAR(128) PRIMARY KEY, created_at BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+CREATE TABLE IF NOT EXISTS ultimate_shop_backends (server_id VARCHAR(64) PRIMARY KEY, heartbeat BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;

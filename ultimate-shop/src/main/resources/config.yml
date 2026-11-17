@@ -1,0 +1,25 @@
+# Paper backends only. Java 21. Requires UltimateRanks 1.3.3+.
+# Shared MariaDB: inherit BlinkNetwork database credentials by default.
+website: https://www.blinksmp.shop
+poll-seconds: 10
+# Used only without BlinkNetwork; each backend needs a unique ID.
+backend-id: standalone-01
+database:
+  inherit-blinknetwork: true
+  jdbc-url: ''
+  username: ''
+  password: ''
+# IDs match the website's server-side catalog. These grant ranks, never staff/OP.
+# Modify display weights/prefixes and extra permissions in UltimateRanks/config.yml.
+packages:
+  ultimate-plus: ULTIMATE_PLUS
+  ultimate-plus-plus: ULTIMATE_PLUS_PLUS
+  ultimate-plus-plus-plus: ULTIMATE_PLUS_PLUS_PLUS
+  supporter: SUPPORTER
+  supporter-plus: SUPPORTER_PLUS
+  supporter-plus-plus: SUPPORTER_PLUS_PLUS
+  supporter-plus-plus-plus: SUPPORTER_PLUS_PLUS_PLUS
+  ultimate-supporter: ULTIMATE_SUPPORTER
+  ultimate-supporter-plus: ULTIMATE_SUPPORTER_PLUS
+  ultimate-supporter-plus-plus: ULTIMATE_SUPPORTER_PLUS_PLUS
+  ultimate-supporter-plus-plus-plus: ULTIMATE_SUPPORTER_PLUS_PLUS_PLUS
