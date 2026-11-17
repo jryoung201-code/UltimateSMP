@@ -9,3 +9,4 @@ class CrateLabelsTest {
  }
  @Test void doesNotLoadChunksForDistantCrates(){World world=mock(World.class);try(var bukkit=mockStatic(Bukkit.class)){bukkit.when(()->Bukkit.getWorld("ultimate_spawn")).thenReturn(world);Crate c=new Crate("rare","Rare",1,List.of());var labels=new CrateLabels(mock(JavaPlugin.class),()->Map.of("rare",c),()->Map.of("ultimate_spawn:400:64:0","rare"));labels.sync();verify(world,never()).getBlockAt(anyInt(),anyInt(),anyInt());verify(world,never()).spawn(any(Location.class),eq(TextDisplay.class),any(Consumer.class));}}
 }
+

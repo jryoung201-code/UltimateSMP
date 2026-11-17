@@ -12,3 +12,4 @@ final class LootPolicy {
  }
  static int choose(List<Crate.Reward> rewards,double random){if(!Double.isFinite(random)||random<0||random>=1)throw new IllegalArgumentException();double[] chances=chances(rewards);int last=-1;for(int i=0;i<chances.length;i++)if(chances[i]>0){last=i;if(random<chances[i])return i;random-=chances[i];}if(last<0)throw new IllegalArgumentException("No active rewards");return last;}
 }
+

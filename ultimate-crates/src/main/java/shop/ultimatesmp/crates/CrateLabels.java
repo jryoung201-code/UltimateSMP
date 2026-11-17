@@ -17,3 +17,4 @@ final class CrateLabels implements Listener {
  @EventHandler public void worldUnload(WorldUnloadEvent e){for(String key:new ArrayList<>(displays.keySet()))if(Position.parse(key).world().equals(e.getWorld().getName()))remove(key);}
  void close(){for(String key:new ArrayList<>(displays.keySet()))remove(key);}
 }
+

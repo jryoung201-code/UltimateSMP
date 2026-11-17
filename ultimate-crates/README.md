@@ -1,4 +1,14 @@
-# UltimateCrates 1.2.0
+# UltimateCrates 1.2.1 — deliver after the spin
+
+Replace the older UltimateCrates JAR on Paper backends; keep plugins/UltimateCrates and your database. Fully stop/restart the backend, not /reload. No schema migration or config changes are needed.
+
+The reward is selected internally when opening begins, but no item is delivered and no key is consumed until the configured spin finishes. At that point the plugin rechecks the current key, inventory capacity and BlinkNetwork readiness, then exchanges exactly one key for the selected reward. TempGrants voucher rewards follow the same delayed delivery path.
+
+Closing the GUI early lets the same spin finish in the background; it never gives an early reward or starts a second spin. Disconnecting, changing worlds, shutting down, losing network readiness, moving away the key or running out of space cancels the opening without consuming a key. Failed openings never show the selected prize as a win. Another key is not accepted while a spin is pending. GUI display items cannot be removed.
+
+The opening-animation-seconds setting remains 0–10 (default 3); zero intentionally disables the delay. Crate definitions, rarity chances, keys, labels and /keyall are unchanged. Tests cover no early delivery, early close, shutdown/disconnect/world changes, network fences, single delivery, failed delivery and GUI item protection. Live Java/Bedrock opening checks remain necessary after installation.
+
+# UltimateCrates usage
 
 Paper 1.21.11 / Java 21. Install the JAR in `plugins/` on both Paper backends and fully restart them. Do not install on Velocity. The plugin recognizes UltimateRanks OWNER/DEV and OP as crate admins; other staff need `ultimatecrates.admin`. Players have `ultimatecrates.use` by default. Placing/registering in `ultimate_spawn` also requires `edit.spawn`.
 
@@ -44,7 +54,7 @@ Without BlinkNetwork, `auto` uses local `plugins/UltimateCrates/crates.yml`. Exp
 CI compiles against Paper 1.21.11 and checks weighted selection boundaries, safe inventory plans, unchanged input stacks, metadata-sensitive merging, template copies, atomic local saves and shared MariaDB revision conflicts. Live Java/Bedrock GUI and right-click gameplay have not been tested. Plugin installation does not automatically register the decorative spawn-world chests.
 
 ## Timed voucher rewards
-UltimateTempGrants 1.0.0 is detected dynamically. Its reward templates are materialized into fresh one-use voucher IDs before key consumption. The integration rechecks inventory readiness, the actual key and capacity after issuance. Ordinary item rewards remain synchronous.
+UltimateTempGrants 1.0.0 is detected dynamically. Its reward templates are materialized into fresh one-use voucher IDs before key consumption. The integration rechecks inventory readiness, the actual key and capacity after issuance. All inventory exchanges occur on the main thread after the spin.
 
 ## Floating text, rarity and key-all (1.1.0)
 
@@ -81,7 +91,8 @@ Reward numbers match slots 1-45 in a freshly opened editor. Fixed percentages ar
 
 Key-all gives five Common keys to every ready online player on the EXECUTING BACKEND, with an admin summary of given/full/loading recipients. No keys are dropped for full inventories. It does not broadcast across Velocity; run on each backend to cover both servers. Uses the existing admin authorization. The amount defaults to one and is capped at 64 per player per invocation.
 
-## Player opening GUI (1.2.0)
-Right-clicking a registered crate with a matching key opens a 27-slot rolling reward display. The final prize is shown in the center under the yellow marker. The reel is cosmetic: the actual weighted draw and inventory grant happen once before the screen opens, so closing, disconnecting or restarting cannot cancel that already-delivered prize or grant another copy. Display items cannot be taken, shift-clicked, hotbar-swapped or dragged out. Closing early ends the animation and reports the secured prize.
+## Player opening GUI (1.2.1)
+Right-clicking a registered crate with a matching key opens a 27-slot rolling reward display. The final prize is shown in the center under the yellow marker. The weighted draw is selected before the reel starts, but the inventory grant and key consumption happen only after the spin finishes and current inventory/key checks pass. Display items cannot be taken, shift-clicked, hotbar-swapped or dragged out. Closing early lets the same animation finish in the background. Disconnects, world changes, server stops and invalid inventory/key state cancel without consuming the key.
 
 `opening-animation-seconds` defaults to 3 and accepts 0-10. Zero shows the prize immediately in the GUI. Update the Crates JAR on both Paper backends; no proxy, Ranks or TempGrants update is needed. Existing config files use the default automatically. Java/Bedrock gameplay rendering still needs a live check; the GUI uses normal chest inventory screens.
+

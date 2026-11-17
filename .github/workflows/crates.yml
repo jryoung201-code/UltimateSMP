@@ -36,8 +36,9 @@ jobs:
       - run: mvn -B -ntp -f ultimate-crates/pom.xml verify
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateCrates-1.2.0
+          name: UltimateCrates-1.2.1
           path: |
-            ultimate-crates/target/UltimateCrates-1.2.0.jar
+            ultimate-crates/target/UltimateCrates-1.2.1.jar
             ultimate-crates/README.md
           if-no-files-found: error
+
