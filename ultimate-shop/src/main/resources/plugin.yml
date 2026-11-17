@@ -1,9 +1,9 @@
 name: UltimateShop
-version: 1.0.0
+version: 1.1.0
 main: shop.ultimatesmp.shop.UltimateShop
 api-version: '1.21.11'
 depend: [UltimateRanks]
-softdepend: [BlinkNetwork]
+softdepend: [BlinkNetwork, UltimateCrates]
 commands:
   shop:
     description: Link your Minecraft account to the website shop
