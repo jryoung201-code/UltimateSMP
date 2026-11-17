@@ -83,7 +83,7 @@ public final class UltimateCrates extends JavaPlugin implements Listener,TabComp
  private List<ItemStack> activeItems(Crate crate){double[] chances=LootPolicy.chances(crate.rewards());List<ItemStack> items=new ArrayList<>();for(int i=0;i<chances.length;i++)if(chances[i]>0)items.add(crate.rewards().get(i).item());return items;}
  private void awardMessage(Player player,ItemStack reward){player.playSound(player.getLocation(),Sound.ENTITY_PLAYER_LEVELUP,.7f,1.2f);tell(player,"You received "+reward.getAmount()+" × "+reward.getType().name().toLowerCase(Locale.ROOT).replace('_',' ')+"!");}
  private boolean deliverReward(Player p,Crate crate,ItemStack reward){
-  if(stopping||!p.isOnline()||!ready(p))return false;
+  if(stopping||!p.isOnline()||p.isDead()||!ready(p))return false;
   ItemStack[] source=InventoryGrant.copy(p.getInventory().getStorageContents());int slot=-1;for(int i=0;i<source.length;i++)if(crate.id().equals(tag(source[i],keyId))){slot=i;break;}boolean off=slot<0;ItemStack hand=p.getInventory().getItemInOffHand();if(off&&!crate.id().equals(tag(hand,keyId))){tell(p,"Your crate key moved. No reward was claimed.");return false;}
   if(!off){source[slot].setAmount(source[slot].getAmount()-1);if(source[slot].getAmount()==0)source[slot]=null;}if(!InventoryGrant.acceptsAll(source,activeItems(crate))){tell(p,"Make inventory space. Your key was kept.");return false;}ItemStack[] plan=InventoryGrant.add(source,reward);if(plan==null){tell(p,"Make inventory space. Your key was kept.");return false;}p.getInventory().setStorageContents(plan);if(off){hand.setAmount(hand.getAmount()-1);p.getInventory().setItemInOffHand(hand);}return true;
  }

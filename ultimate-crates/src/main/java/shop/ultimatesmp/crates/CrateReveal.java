@@ -11,6 +11,7 @@ import org.bukkit.event.*;
 import org.bukkit.event.inventory.*;
 import org.bukkit.event.player.PlayerQuitEvent;
 import org.bukkit.event.player.PlayerChangedWorldEvent;
+import org.bukkit.event.entity.PlayerDeathEvent;
 import org.bukkit.inventory.*;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -64,7 +65,7 @@ final class CrateReveal implements Listener {
     private void tick(Session session) {
         Player player=session.player;
         if(sessions.get(player.getUniqueId())!=session)return;
-        if(!player.isOnline()||!ready.test(player)) { cancel(player.getUniqueId(),true);closeScreen(session);return; }
+        if(!player.isOnline()||player.isDead()||!ready.test(player)) { cancel(player.getUniqueId(),true);closeScreen(session);return; }
         if(session.settled)return;
         if(session.frame==0)player.openInventory(session.screen.inventory);
         if(session.frame++>=session.frames) {
@@ -126,6 +127,7 @@ final class CrateReveal implements Listener {
     }
     @EventHandler public void quit(PlayerQuitEvent event) { cancel(event.getPlayer().getUniqueId(),false); }
     @EventHandler public void changedWorld(PlayerChangedWorldEvent event) { cancel(event.getPlayer().getUniqueId(),true); }
+    @EventHandler public void death(PlayerDeathEvent event) { cancel(event.getEntity().getUniqueId(),false); }
     void shutdown() {
         for(Session session:new ArrayList<>(sessions.values())) { cancel(session.player.getUniqueId(),false);closeScreen(session); }
     }
