@@ -40,6 +40,8 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
         return thread;
     });
     private JDA jda;
+    private boolean registered;
+    private boolean reportedGuild;
 
     PaperDiscordBot(java.util.logging.Logger logger, ShopStore store, String guildId) {
         this.logger = logger;
@@ -52,13 +54,29 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     }
 
     @Override public void onReady(ReadyEvent event) {
-        var guild = event.getJDA().getGuildById(guildId);
+        io.scheduleWithFixedDelay(() -> {
+            try {
+                registerCommands(event.getJDA());
+                if (registered) finishDue(event.getJDA());
+            } catch (Exception error) {
+                report("initialize guild or process giveaways", error);
+            }
+        }, 0, 10, TimeUnit.SECONDS);
+    }
+
+    private void registerCommands(JDA discord) {
+        if (registered) return;
+        var guild = discord.getGuildById(guildId);
         if (guild == null) {
-            logger.warning("Invite the giveaway bot to the configured Discord server, then restart Paper.");
+            if (!reportedGuild) {
+                logger.warning("Discord bot ID " + discord.getSelfUser().getId()
+                        + " cannot see configured server ID " + guildId
+                        + ". Connected server IDs: " + discord.getGuilds().stream().map(g -> g.getId()).toList());
+                reportedGuild = true;
+            }
             return;
         }
-        guild.upsertCommand("link", "Get a private Minecraft linking code").queue(
-                ignored -> {}, error -> report("register /link", error));
+        guild.upsertCommand("link", "Get a private Minecraft linking code").complete();
         var prize = new OptionData(OptionType.STRING, "prize", "Minecraft prize", true);
         PRIZES.forEach(id -> prize.addChoice(id, id));
         guild.upsertCommand(Commands.slash("giveaway", "Start a Minecraft prize giveaway")
@@ -67,9 +85,9 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
                         new OptionData(OptionType.INTEGER, "quantity", "Keys per winner or days of rank access", true).setRequiredRange(1, 365),
                         new OptionData(OptionType.INTEGER, "minutes", "Time to enter", true).setRequiredRange(1, 43200),
                         new OptionData(OptionType.INTEGER, "winners", "Number of winners", true).setRequiredRange(1, 20)))
-                .queue(ignored -> logger.info("UltimateSMP Discord giveaway commands registered."),
-                        error -> report("register /giveaway", error));
-        io.scheduleWithFixedDelay(() -> finishDue(event.getJDA()), 0, 10, TimeUnit.SECONDS);
+                .complete();
+        registered = true;
+        logger.info("UltimateSMP Discord giveaway commands registered for server " + guildId + ".");
     }
 
     @Override public void onSlashCommandInteraction(SlashCommandInteractionEvent event) {
