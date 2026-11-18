@@ -17,6 +17,7 @@ import java.net.URI;
 public final class UltimateShop extends JavaPlugin implements Listener, TabCompleter {
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"UltimateShop-DB");t.setDaemon(true);return t;});
     private final AtomicBoolean polling=new AtomicBoolean();
+    private PaperDiscordBot discordBot;
     private ShopStore store;private volatile boolean ready,stopping;private JavaPlugin ranks,network;private Map<String,String> packages=Map.of();private String website;private String backend;
     private final Set<UUID> delivering=new HashSet<>();private Map<String,String> keyPackages=Map.of();
     private final Map<UUID,Long> links=new HashMap<>();private final Set<UUID> fetching=new HashSet<>();
@@ -36,8 +37,29 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
             Bukkit.getPluginManager().registerEvents(this,this);getCommand("shop").setTabCompleter(this);getCommand("link").setTabCompleter((sender,command,label,args)->List.of());getCommand("ultimateshop").setTabCompleter(this);
             Bukkit.getScheduler().runTaskTimer(this,this::poll,1,20L*Math.max(5,getConfig().getInt("poll-seconds",10)));
             polling.set(true);io.execute(()->{try{store.initialize();ready=true;getLogger().info("Shared UltimateShop records ready.");}catch(Exception e){getLogger().severe("Shop database setup failed ("+e.getClass().getSimpleName()+"). Check JDBC settings; no purchases granted.");}finally{polling.set(false);}});
+            startDiscordBot();
         }catch(Exception e){getLogger().severe("Cannot enable UltimateShop: "+e.getMessage());Bukkit.getPluginManager().disablePlugin(this);}
     }
+    private void startDiscordBot() {
+        if (!getConfig().getBoolean("discord.enabled", false)) return;
+        String token = System.getenv("DISCORD_TOKEN");
+        if (token == null || token.isBlank()) token = getConfig().getString("discord.token", "");
+        String guild = System.getenv("DISCORD_GUILD_ID");
+        if (guild == null || guild.isBlank()) guild = getConfig().getString("discord.guild-id", "");
+        if (token.isBlank() || !guild.matches("[0-9]{17,20}")) {
+            getLogger().warning("Discord bot needs a token and a valid Discord server ID.");
+            return;
+        }
+        try {
+            discordBot = new PaperDiscordBot(getLogger(), store, guild);
+            discordBot.start(token);
+        } catch (Exception error) {
+            if (discordBot != null) discordBot.close();
+            discordBot = null;
+            getLogger().warning("Discord bot startup failed (" + error.getClass().getSimpleName() + ").");
+        }
+    }
+
     private void loadPackages() throws Exception {
         var u=URI.create(getConfig().getString("website","https://www.blinksmp.shop"));if(!"https".equals(u.getScheme())||u.getHost()==null||u.getUserInfo()!=null||u.getQuery()!=null||u.getFragment()!=null||!(u.getPath().isEmpty()||u.getPath().equals("/")))throw new IllegalArgumentException("website must be an HTTPS origin.");
         Map<String,String> next=new HashMap<>();var section=getConfig().getConfigurationSection("packages");if(section==null)throw new IllegalArgumentException("Missing packages.");
@@ -124,5 +146,5 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
 
     @EventHandler public void quit(PlayerQuitEvent e){links.remove(e.getPlayer().getUniqueId());fetching.remove(e.getPlayer().getUniqueId());}
     @Override public List<String> onTabComplete(CommandSender s,Command c,String a,String[] args){if(c.getName().equals("shop")||!s.hasPermission("ultimateshop.admin"))return List.of();if(args.length==1)return List.of("give","givekey","deliveries","revoke","status","reload").stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();if(args.length==3)return packages.keySet().stream().filter(x->x.startsWith(args[2])).sorted().toList();return List.of();}
-    @Override public void onDisable(){stopping=true;ready=false;io.shutdownNow();if(ranks!=null)for(Player p:Bukkit.getOnlinePlayers())try{ranks.getClass().getMethod("setShopRankExpiries",UUID.class,Map.class).invoke(ranks,p.getUniqueId(),Map.of());}catch(Exception ignored){}}
+    @Override public void onDisable(){if(discordBot!=null)discordBot.close();stopping=true;ready=false;io.shutdownNow();if(ranks!=null)for(Player p:Bukkit.getOnlinePlayers())try{ranks.getClass().getMethod("setShopRankExpiries",UUID.class,Map.class).invoke(ranks,p.getUniqueId(),Map.of());}catch(Exception ignored){}}
 }

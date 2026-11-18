@@ -30,3 +30,9 @@ key-packages:
   key-uncommon: uncommon
   key-rare: rare
   key-legendary: legendary
+
+# Turn on only on one always-on Paper backend. Environment variables take precedence.
+discord:
+  enabled: false
+  guild-id: '1525992907683921980'
+  token: ''
