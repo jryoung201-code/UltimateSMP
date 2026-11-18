@@ -39,7 +39,7 @@ jobs:
           mvn -B -ntp -f ultimate-network/pom.xml package
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateSpawn-Install-1.1.0
+          name: UltimateSpawn-Install-1.1.3
           if-no-files-found: error
           path: |
             ultimate-spawn/target/UltimateSpawn-1.1.3.jar

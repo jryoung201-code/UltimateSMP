@@ -33,8 +33,8 @@ jobs:
         run: mvn -B -ntp -f ultimate-spawn/pom.xml verify
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateSpawn-1.1.0
+          name: UltimateSpawn-1.1.3
           path: |
-            ultimate-spawn/target/UltimateSpawn-1.1.0.jar
+            ultimate-spawn/target/UltimateSpawn-1.1.3.jar
             ultimate-spawn/README.md
           if-no-files-found: error
