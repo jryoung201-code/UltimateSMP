@@ -8,7 +8,17 @@ public final class SpawnProtection implements Listener {
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void breakBlock(BlockBreakEvent e){if(locked(e.getPlayer(),e.getBlock().getWorld()))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void bucketEmpty(PlayerBucketEmptyEvent e){if(locked(e.getPlayer(),e.getBlock().getWorld()))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void bucketFill(PlayerBucketFillEvent e){if(locked(e.getPlayer(),e.getBlock().getWorld()))e.setCancelled(true);}
- @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interact(PlayerInteractEvent e){if(locked(e.getPlayer(),e.getPlayer().getWorld())&&e.getClickedBlock()!=null){e.setUseInteractedBlock(Event.Result.DENY);e.setUseItemInHand(Event.Result.DENY);e.setCancelled(true);}}
+ @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void interact(PlayerInteractEvent e){
+  var block=e.getClickedBlock();
+  if(block==null||!locked(e.getPlayer(),block.getWorld()))return;
+  if(e.getAction()==Action.RIGHT_CLICK_BLOCK&&block.getType()==Material.ENDER_CHEST){
+   e.setUseItemInHand(Event.Result.DENY);
+   return;
+  }
+  e.setUseInteractedBlock(Event.Result.DENY);
+  e.setUseItemInHand(Event.Result.DENY);
+  e.setCancelled(true);
+ }
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void entityClick(PlayerInteractEntityEvent e){if(!(e.getRightClicked() instanceof Player)&&locked(e.getPlayer(),e.getRightClicked().getWorld()))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void entityAt(PlayerInteractAtEntityEvent e){if(locked(e.getPlayer(),e.getRightClicked().getWorld()))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void open(InventoryOpenEvent e){Location l=e.getInventory().getLocation();if(l!=null&&e.getPlayer() instanceof Player p&&e.getInventory().getHolder()!=p&&e.getInventory().getType()!=InventoryType.ENDER_CHEST&&e.getInventory().getType()!=InventoryType.CRAFTING&&locked(p,l.getWorld()))e.setCancelled(true);}
@@ -19,7 +29,7 @@ public final class SpawnProtection implements Listener {
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void explosion(EntityExplodeEvent e){if(protectedWorld.test(e.getEntity().getWorld())){e.blockList().clear();e.setCancelled(true);}}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void blockExplosion(BlockExplodeEvent e){if(protectedWorld.test(e.getBlock().getWorld())){e.blockList().clear();e.setCancelled(true);}}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void mobChange(EntityChangeBlockEvent e){if(protectedWorld.test(e.getBlock().getWorld()))e.setCancelled(true);}
- @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void flow(BlockFromToEvent e){if(protectedWorld.test(e.getBlock().getWorld()))e.setCancelled(true);}
+ @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void flow(BlockFromToEvent e){if(protectedWorld.test(e.getBlock().getWorld())&&e.getBlock().getType()!=Material.WATER)e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void ignite(BlockIgniteEvent e){if(protectedWorld.test(e.getBlock().getWorld())&&(e.getPlayer()==null||!e.getPlayer().hasPermission("edit.spawn")))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void burn(BlockBurnEvent e){if(protectedWorld.test(e.getBlock().getWorld()))e.setCancelled(true);}
  @EventHandler(priority=EventPriority.HIGHEST,ignoreCancelled=true)public void spread(BlockSpreadEvent e){if(protectedWorld.test(e.getBlock().getWorld()))e.setCancelled(true);}

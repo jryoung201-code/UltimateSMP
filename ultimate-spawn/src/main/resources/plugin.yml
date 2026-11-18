@@ -1,5 +1,5 @@
 name: UltimateSpawn
-version: 1.1.0
+version: 1.1.3
 main: shop.ultimatesmp.spawn.UltimateSpawn
 api-version: '1.21.11'
 depend: [BlinkNetwork]
