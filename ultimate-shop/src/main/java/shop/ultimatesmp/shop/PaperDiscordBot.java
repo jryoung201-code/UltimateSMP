@@ -48,7 +48,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     }
 
     void start(String token) {
-        jda = JDABuilder.createLight(token).addEventListeners(this).build();
+        jda = JDABuilder.createLight(token, List.of()).addEventListeners(this).build();
     }
 
     @Override public void onReady(ReadyEvent event) {
