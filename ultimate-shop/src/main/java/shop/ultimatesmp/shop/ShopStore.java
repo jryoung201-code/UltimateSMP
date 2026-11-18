@@ -16,11 +16,11 @@ public final class ShopStore {
         }
     }
     public static String hash(String token) throws Exception {return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));}
-    public boolean linkDiscord(UUID player, String code) throws Exception {
-        try (var connection = connect()) {
+    public boolean linkDiscord(DiscordDatabase database, UUID player, String code) throws Exception {
+        try (var connection = database.connect()) {
             connection.setAutoCommit(false);
             try (var query = connection.prepareStatement(
-                    "SELECT discord_id FROM ultimate_discord_codes WHERE token_hash=? AND expires>? FOR UPDATE")) {
+                    "SELECT discord_id FROM ultimate_discord_codes WHERE token_hash=? AND expires>?")) {
                 query.setString(1, hash(code));
                 query.setLong(2, System.currentTimeMillis());
                 String discordId;
@@ -38,7 +38,7 @@ public final class ShopStore {
                 return true;
             } catch (SQLException error) {
                 connection.rollback();
-                if (error.getErrorCode() == 1062) return false;
+                if (error.getErrorCode() == 19) return false;
                 throw error;
             }
         }

@@ -32,6 +32,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
             "key-legendary", "ultimate-plus", "ultimate-plus-plus", "ultimate-plus-plus-plus");
     private final java.util.logging.Logger logger;
     private final ShopStore store;
+    private final DiscordDatabase database;
     private final String guildId;
     private final SecureRandom random = new SecureRandom();
     private final java.util.concurrent.ScheduledExecutorService io = Executors.newSingleThreadScheduledExecutor(task -> {
@@ -43,9 +44,10 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     private boolean registered;
     private boolean reportedGuild;
 
-    PaperDiscordBot(java.util.logging.Logger logger, ShopStore store, String guildId) {
+    PaperDiscordBot(java.util.logging.Logger logger, ShopStore store, DiscordDatabase database, String guildId) {
         this.logger = logger;
         this.store = store;
+        this.database = database;
         this.guildId = guildId;
     }
 
@@ -128,14 +130,14 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     }
 
     private String link(String discordId) throws Exception {
-        try (var connection = store.connect()) {
+        try (var connection = database.connect()) {
             if (linked(connection, discordId)) return "Your Discord account is already linked.";
             byte[] bytes = new byte[16];
             random.nextBytes(bytes);
             String code = HexFormat.of().formatHex(bytes);
             ShopStore.update(connection, """
                     INSERT INTO ultimate_discord_codes(discord_id,token_hash,expires) VALUES(?,?,?)
-                    ON DUPLICATE KEY UPDATE token_hash=VALUES(token_hash),expires=VALUES(expires)
+                    ON CONFLICT(discord_id) DO UPDATE SET token_hash=excluded.token_hash,expires=excluded.expires
                     """, discordId, ShopStore.hash(code), System.currentTimeMillis() + 300_000);
             return "Enter `/link " + code + "` in Minecraft within five minutes. Keep this code private.";
         }
@@ -163,7 +165,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
                 + " per winner · " + winners + " winner(s)\nEnds <t:" + ends / 1000
                 + ":R>. Link your Minecraft account with /link to enter.")
                 .setActionRow(Button.primary(PREFIX + id, "Enter giveaway")).complete();
-        try (var connection = store.connect()) {
+        try (var connection = database.connect()) {
             ShopStore.update(connection, """
                     INSERT INTO ultimate_discord_giveaways(id,guild_id,channel_id,message_id,prize,quantity,winners,ends)
                     VALUES(?,?,?,?,?,?,?,?)
@@ -180,7 +182,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
         return transaction(connection -> {
             try (var query = connection.prepareStatement("""
                     SELECT ends,result FROM ultimate_discord_giveaways
-                    WHERE id=? AND guild_id=? AND message_id=? FOR UPDATE
+                    WHERE id=? AND guild_id=? AND message_id=?
                     """)) {
                 query.setString(1, id);
                 query.setString(2, guildId);
@@ -194,7 +196,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
             String discordId = event.getUser().getId();
             if (!linked(connection, discordId)) return "Link your Minecraft account with /link first.";
             int inserted = ShopStore.update(connection, """
-                    INSERT IGNORE INTO ultimate_discord_entries(giveaway_id,discord_id) VALUES(?,?)
+                    INSERT OR IGNORE INTO ultimate_discord_entries(giveaway_id,discord_id) VALUES(?,?)
                     """, id, discordId);
             return inserted == 1 ? "You entered the giveaway." : "You already entered this giveaway.";
         });
@@ -203,7 +205,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     private void finishDue(JDA discord) {
         try {
             List<String> due = new ArrayList<>();
-            try (var connection = store.connect(); var query = connection.prepareStatement("""
+            try (var connection = database.connect(); var query = connection.prepareStatement("""
                     SELECT id FROM ultimate_discord_giveaways
                     WHERE guild_id=? AND announced=0 AND ends<=? ORDER BY ends LIMIT 25
                     """)) {
@@ -217,7 +219,10 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
                 if (Thread.currentThread().isInterrupted()) return;
                 try {
                     Result result = settle(id);
-                    if (result != null) announce(discord, id, result);
+                    if (result != null) {
+                        queuePrizes(id);
+                        announce(discord, id, result);
+                    }
                 } catch (Exception error) {
                     report("finish giveaway", error);
                 }
@@ -232,7 +237,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
             String prize, channel, message, result;
             int quantity, count;
             try (var query = connection.prepareStatement("""
-                    SELECT * FROM ultimate_discord_giveaways WHERE id=? AND guild_id=? FOR UPDATE
+                    SELECT * FROM ultimate_discord_giveaways WHERE id=? AND guild_id=?
                     """)) {
                 query.setString(1, id);
                 query.setString(2, guildId);
@@ -262,22 +267,59 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
             while (winners.size() < count && !entries.isEmpty()) {
                 Entrant winner = entries.remove(random.nextInt(entries.size()));
                 String source = PREFIX + id + ":" + winner.discord();
-                if (isKey(prize)) {
-                    ShopStore.update(connection, """
-                            INSERT INTO ultimate_shop_key_deliveries(id,source,player_id,package_id,amount,state,updated_at)
-                            VALUES(?,?,?,?,?,'pending',?)
-                            """, UUID.randomUUID().toString(), source, winner.player(), prize, quantity, now);
-                } else {
-                    ShopStore.update(connection, """
-                            INSERT INTO ultimate_shop_grants(source,player_id,package_id,expires) VALUES(?,?,?,?)
-                            """, source, winner.player(), prize, now + quantity * 86_400_000L);
-                }
+                ShopStore.update(connection, """
+                        INSERT INTO giveaway_delivery_queue(giveaway_id,source,player_id,prize,quantity,drawn_at)
+                        VALUES(?,?,?,?,?,?)
+                        """, id, source, winner.player(), prize, quantity, now);
                 winners.add("\"" + winner.discord() + "\"");
             }
             result = "[" + String.join(",", winners) + "]";
             ShopStore.update(connection, "UPDATE ultimate_discord_giveaways SET result=? WHERE id=?", result, id);
             return new Result(channel, message, prize, quantity, result);
         });
+    }
+
+    private void queuePrizes(String id) throws SQLException {
+        try (var local = database.connect(); var query = local.prepareStatement("""
+                SELECT source,player_id,prize,quantity,drawn_at FROM giveaway_delivery_queue WHERE giveaway_id=?
+                """)) {
+            query.setString(1, id);
+            try (var rows = query.executeQuery()) {
+                if (!rows.next()) return;
+                try (var shared = store.connect()) {
+                    shared.setAutoCommit(false);
+                    try {
+                        do {
+                            String source = rows.getString("source");
+                            String player = rows.getString("player_id");
+                            String prize = rows.getString("prize");
+                            int quantity = rows.getInt("quantity");
+                            long drawnAt = rows.getLong("drawn_at");
+                            if (isKey(prize)) {
+                                ShopStore.update(shared, """
+                                        INSERT INTO ultimate_shop_key_deliveries
+                                        (id,source,player_id,package_id,amount,state,updated_at)
+                                        VALUES(?,?,?,?,?,'pending',?) ON DUPLICATE KEY UPDATE source=source
+                                        """, UUID.nameUUIDFromBytes(source.getBytes(java.nio.charset.StandardCharsets.UTF_8)).toString(),
+                                        source, player, prize, quantity, drawnAt);
+                            } else {
+                                ShopStore.update(shared, """
+                                        INSERT INTO ultimate_shop_grants(source,player_id,package_id,expires)
+                                        VALUES(?,?,?,?) ON DUPLICATE KEY UPDATE source=source
+                                        """, source, player, prize, drawnAt + quantity * 86_400_000L);
+                            }
+                        } while (rows.next());
+                        shared.commit();
+                    } catch (SQLException error) {
+                        shared.rollback();
+                        throw error;
+                    }
+                }
+            }
+        }
+        try (var local = database.connect()) {
+            ShopStore.update(local, "DELETE FROM giveaway_delivery_queue WHERE giveaway_id=?", id);
+        }
     }
 
     private void announce(JDA discord, String id, Result result) throws Exception {
@@ -300,13 +342,13 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
             if (error.getErrorCode() != 10008) throw error;
             logger.warning("Giveaway prizes saved; the Discord post was deleted.");
         }
-        try (var connection = store.connect()) {
+        try (var connection = database.connect()) {
             ShopStore.update(connection, "UPDATE ultimate_discord_giveaways SET announced=1 WHERE id=?", id);
         }
     }
 
     private <T> T transaction(Transaction<T> operation) throws Exception {
-        try (var connection = store.connect()) {
+        try (var connection = database.connect()) {
             connection.setAutoCommit(false);
             try {
                 T result = operation.run(connection);

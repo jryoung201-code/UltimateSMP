@@ -18,6 +18,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
     private final ExecutorService io=Executors.newSingleThreadExecutor(r->{Thread t=new Thread(r,"UltimateShop-DB");t.setDaemon(true);return t;});
     private final AtomicBoolean polling=new AtomicBoolean();
     private PaperDiscordBot discordBot;
+    private DiscordDatabase discordDatabase;
     private ShopStore store;private volatile boolean ready,stopping;private JavaPlugin ranks,network;private Map<String,String> packages=Map.of();private String website;private String backend;
     private final Set<UUID> delivering=new HashSet<>();private Map<String,String> keyPackages=Map.of();
     private final Map<UUID,Long> links=new HashMap<>();private final Set<UUID> fetching=new HashSet<>();
@@ -42,6 +43,14 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
     }
     private void startDiscordBot() {
         if (!getConfig().getBoolean("discord.enabled", false)) return;
+        try {
+            discordDatabase = new DiscordDatabase(getDataFolder().toPath().resolve("Data.db"));
+            discordDatabase.initialize();
+        } catch (Exception error) {
+            discordDatabase = null;
+            getLogger().warning("Could not create Discord Data.db (" + error.getClass().getSimpleName() + ").");
+            return;
+        }
         String token = System.getenv("DISCORD_TOKEN");
         if (token == null || token.isBlank()) token = getConfig().getString("discord.token", "");
         String guild = System.getenv("DISCORD_GUILD_ID");
@@ -51,7 +60,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
             return;
         }
         try {
-            discordBot = new PaperDiscordBot(getLogger(), store, guild);
+            discordBot = new PaperDiscordBot(getLogger(), store, discordDatabase, guild);
             discordBot.start(token);
         } catch (Exception error) {
             if (discordBot != null) discordBot.close();
@@ -99,15 +108,15 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
                 player.sendMessage("Run /link in Discord to get your private code.");
                 return true;
             }
-            if (!ready) {
-                player.sendMessage("Discord linking is temporarily unavailable.");
+            if (discordDatabase == null) {
+                player.sendMessage("Run /link on the Paper server hosting the Discord bot.");
                 return true;
             }
             UUID playerId = player.getUniqueId();
             String code = args[0];
             io.execute(() -> {
                 try {
-                    boolean linked = store.linkDiscord(playerId, code);
+                    boolean linked = store.linkDiscord(discordDatabase, playerId, code);
                     main(() -> {
                         if (Bukkit.getPlayer(playerId) == player) player.sendMessage(linked
                                 ? "Your Discord account is linked."
