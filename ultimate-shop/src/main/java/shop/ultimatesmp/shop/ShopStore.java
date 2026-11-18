@@ -16,6 +16,34 @@ public final class ShopStore {
         }
     }
     public static String hash(String token) throws Exception {return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));}
+    public boolean linkDiscord(UUID player, String code) throws Exception {
+        try (var connection = connect()) {
+            connection.setAutoCommit(false);
+            try (var query = connection.prepareStatement(
+                    "SELECT discord_id FROM ultimate_discord_codes WHERE token_hash=? AND expires>? FOR UPDATE")) {
+                query.setString(1, hash(code));
+                query.setLong(2, System.currentTimeMillis());
+                String discordId;
+                try (var rows = query.executeQuery()) {
+                    if (!rows.next()) {
+                        connection.rollback();
+                        return false;
+                    }
+                    discordId = rows.getString(1);
+                }
+                update(connection, "INSERT INTO ultimate_discord_links(discord_id,player_id) VALUES(?,?)",
+                        discordId, player.toString());
+                update(connection, "DELETE FROM ultimate_discord_codes WHERE discord_id=?", discordId);
+                connection.commit();
+                return true;
+            } catch (SQLException error) {
+                connection.rollback();
+                if (error.getErrorCode() == 1062) return false;
+                throw error;
+            }
+        }
+    }
+
     public void link(UUID id,String name,String token,long expires)throws Exception {
         try(var c=connect()){
             update(c,"DELETE FROM ultimate_shop_links WHERE expires < ?",System.currentTimeMillis());

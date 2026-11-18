@@ -33,7 +33,7 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
             if(!url.startsWith("jdbc:mariadb://")&&!url.startsWith("jdbc:mysql://"))throw new IllegalArgumentException("A shared MariaDB/MySQL JDBC URL is required.");
             backend=network!=null?network.getConfig().getString("server-id",""):getConfig().getString("backend-id","");if(!backend.matches("[a-zA-Z0-9_-]{1,64}"))throw new IllegalArgumentException("Set a unique backend-id.");
             store=new ShopStore(url.replaceFirst("^jdbc:mysql:","jdbc:mariadb:"),user,password);
-            Bukkit.getPluginManager().registerEvents(this,this);getCommand("shop").setTabCompleter(this);getCommand("ultimateshop").setTabCompleter(this);
+            Bukkit.getPluginManager().registerEvents(this,this);getCommand("shop").setTabCompleter(this);getCommand("link").setTabCompleter((sender,command,label,args)->List.of());getCommand("ultimateshop").setTabCompleter(this);
             Bukkit.getScheduler().runTaskTimer(this,this::poll,1,20L*Math.max(5,getConfig().getInt("poll-seconds",10)));
             polling.set(true);io.execute(()->{try{store.initialize();ready=true;getLogger().info("Shared UltimateShop records ready.");}catch(Exception e){getLogger().severe("Shop database setup failed ("+e.getClass().getSimpleName()+"). Check JDBC settings; no purchases granted.");}finally{polling.set(false);}});
         }catch(Exception e){getLogger().severe("Cannot enable UltimateShop: "+e.getMessage());Bukkit.getPluginManager().disablePlugin(this);}
@@ -68,6 +68,38 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
     }
     private void finishDelivery(Player p,ShopStore.Delivery d,String claim,boolean given){io.execute(()->{try{store.finish(d.id(),claim,given);main(()->{delivering.remove(p.getUniqueId());if(given&&Bukkit.getPlayer(p.getUniqueId())==p)p.sendMessage("[UltimateShop] Delivered "+d.amount()+" "+d.pack().substring(4)+" key(s).");});}catch(Exception e){main(()->delivering.remove(p.getUniqueId()));getLogger().severe("Key delivery "+d.id()+" acknowledgement failed. Review before retrying; no automatic duplicate grant.");}});}
     @Override public boolean onCommand(CommandSender s,Command command,String label,String[] args){
+        if (command.getName().equals("link")) {
+            if (!(s instanceof Player player)) {
+                s.sendMessage("Run /link in Minecraft.");
+                return true;
+            }
+            if (args.length != 1 || !args[0].matches("[0-9a-f]{32}")) {
+                player.sendMessage("Run /link in Discord to get your private code.");
+                return true;
+            }
+            if (!ready) {
+                player.sendMessage("Discord linking is temporarily unavailable.");
+                return true;
+            }
+            UUID playerId = player.getUniqueId();
+            String code = args[0];
+            io.execute(() -> {
+                try {
+                    boolean linked = store.linkDiscord(playerId, code);
+                    main(() -> {
+                        if (Bukkit.getPlayer(playerId) == player) player.sendMessage(linked
+                                ? "Your Discord account is linked."
+                                : "Code expired, invalid, or an account is already linked.");
+                    });
+                } catch (Exception error) {
+                    getLogger().warning("Discord linking failed (" + error.getClass().getSimpleName() + ").");
+                    main(() -> {
+                        if (Bukkit.getPlayer(playerId) == player) player.sendMessage("Discord linking is temporarily unavailable.");
+                    });
+                }
+            });
+            return true;
+        }
         if(command.getName().equals("shop")){
             if(!(s instanceof Player p)){s.sendMessage("Players: /shop. Console: /ultimateshop give <player|uuid> <package> [days]");return true;}
             if(!ready||!usable(p)){s.sendMessage("Shop/network data is loading. Try shortly.");return true;}
@@ -86,6 +118,10 @@ public final class UltimateShop extends JavaPlugin implements Listener, TabCompl
         }
         s.sendMessage("/ultimateshop give <player|uuid> <package> [days] | givekey <player|uuid> <rarity> [amount] | deliveries <player|uuid> | revoke <player|uuid> <package> | status <player|uuid> | reload");return true;
     }
+    @EventHandler public void hideLink(org.bukkit.event.player.PlayerCommandSendEvent event) {
+        event.getCommands().removeIf(name -> name.equals("link") || name.equals("ultimateshop:link"));
+    }
+
     @EventHandler public void quit(PlayerQuitEvent e){links.remove(e.getPlayer().getUniqueId());fetching.remove(e.getPlayer().getUniqueId());}
     @Override public List<String> onTabComplete(CommandSender s,Command c,String a,String[] args){if(c.getName().equals("shop")||!s.hasPermission("ultimateshop.admin"))return List.of();if(args.length==1)return List.of("give","givekey","deliveries","revoke","status","reload").stream().filter(x->x.startsWith(args[0].toLowerCase(Locale.ROOT))).toList();if(args.length==3)return packages.keySet().stream().filter(x->x.startsWith(args[2])).sorted().toList();return List.of();}
     @Override public void onDisable(){stopping=true;ready=false;io.shutdownNow();if(ranks!=null)for(Player p:Bukkit.getOnlinePlayers())try{ranks.getClass().getMethod("setShopRankExpiries",UUID.class,Map.class).invoke(ranks,p.getUniqueId(),Map.of());}catch(Exception ignored){}}

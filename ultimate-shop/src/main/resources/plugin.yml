@@ -1,10 +1,13 @@
 name: UltimateShop
-version: 1.1.0
+version: 1.2.0
 main: shop.ultimatesmp.shop.UltimateShop
 api-version: '1.21.11'
 depend: [UltimateRanks]
 softdepend: [BlinkNetwork, UltimateCrates]
 commands:
+  link:
+    description: Link your Discord account using a private code
+    usage: /link <code>
   shop:
     description: Link your Minecraft account to the website shop
     usage: /shop

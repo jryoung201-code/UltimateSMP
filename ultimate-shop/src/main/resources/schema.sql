@@ -13,3 +13,8 @@ CREATE TABLE IF NOT EXISTS ultimate_shop_price_audit (id BIGINT AUTO_INCREMENT P
 CREATE TABLE IF NOT EXISTS ultimate_shop_order_prices (order_id CHAR(36) PRIMARY KEY, cents INT NOT NULL, quantity INT NOT NULL, kind VARCHAR(16) NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE IF NOT EXISTS ultimate_shop_key_deliveries (id CHAR(36) PRIMARY KEY, source VARCHAR(128) NOT NULL UNIQUE, player_id CHAR(36) NOT NULL, package_id VARCHAR(64) NOT NULL, amount INT NOT NULL, state VARCHAR(16) NOT NULL DEFAULT 'pending', claim_id CHAR(36), backend VARCHAR(64), updated_at BIGINT NOT NULL, INDEX(player_id,state)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
 CREATE TABLE IF NOT EXISTS ultimate_shop_key_backends (server_id VARCHAR(64) NOT NULL, package_id VARCHAR(64) NOT NULL, heartbeat BIGINT NOT NULL, PRIMARY KEY(server_id,package_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin;
+
+CREATE TABLE IF NOT EXISTS ultimate_discord_links (discord_id VARCHAR(20) PRIMARY KEY, player_id CHAR(36) NOT NULL UNIQUE) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS ultimate_discord_codes (discord_id VARCHAR(20) PRIMARY KEY, token_hash CHAR(64) NOT NULL UNIQUE, expires BIGINT NOT NULL) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS ultimate_discord_giveaways (id CHAR(36) PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, channel_id VARCHAR(20) NOT NULL, message_id VARCHAR(20) NOT NULL, prize VARCHAR(64) NOT NULL, quantity INT NOT NULL, winners INT NOT NULL, ends BIGINT NOT NULL, result TEXT, announced TINYINT NOT NULL DEFAULT 0, INDEX(announced,ends)) ENGINE=InnoDB;
+CREATE TABLE IF NOT EXISTS ultimate_discord_entries (giveaway_id CHAR(36) NOT NULL, discord_id VARCHAR(20) NOT NULL, PRIMARY KEY(giveaway_id,discord_id)) ENGINE=InnoDB;

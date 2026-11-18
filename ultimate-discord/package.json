@@ -1,0 +1,13 @@
+{
+  "name": "ultimate-discord",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js",
+    "check": "node --check bot.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.19.3",
+    "mysql2": "^3.14.1"
+  }
+}

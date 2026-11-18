@@ -1,9 +1,9 @@
 name: Build UltimateShop
 on:
   push:
-    paths: ['ultimate-shop/**', 'ultimate-ranks/**', 'ultimate-crates/**', '.github/workflows/shop.yml']
+    paths: ['ultimate-shop/**', 'ultimate-discord/**', 'ultimate-ranks/**', 'ultimate-crates/**', '.github/workflows/shop.yml']
   pull_request:
-    paths: ['ultimate-shop/**', 'ultimate-ranks/**', 'ultimate-crates/**', '.github/workflows/shop.yml']
+    paths: ['ultimate-shop/**', 'ultimate-discord/**', 'ultimate-ranks/**', 'ultimate-crates/**', '.github/workflows/shop.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -33,6 +33,10 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm --prefix ultimate-discord run check
       - run: mvn -B -ntp -f ultimate-shop/pom.xml verify
       - run: mvn -B -ntp -f ultimate-crates/pom.xml verify
       - run: mvn -B -ntp -f ultimate-ranks/pom.xml package dependency:build-classpath -Dmdep.outputFile=target/test-classpath
@@ -44,10 +48,11 @@ jobs:
           done
       - uses: actions/upload-artifact@v4
         with:
-          name: UltimateShop-1.1.0-and-UltimateRanks-1.3.3
+          name: UltimateShop-1.2.0-and-UltimateRanks-1.3.3
           path: |
-            ultimate-shop/target/UltimateShop-1.1.0.jar
+            ultimate-shop/target/UltimateShop-1.2.0.jar
             ultimate-ranks/target/UltimateRanks-1.3.3.jar
+            ultimate-discord/
             ultimate-shop/README.md
             ultimate-shop/KEYS-AND-PRICES.md
             ultimate-crates/target/UltimateCrates-1.2.2.jar
