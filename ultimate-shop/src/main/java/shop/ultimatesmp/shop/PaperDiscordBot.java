@@ -219,16 +219,36 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
                 if (Thread.currentThread().isInterrupted()) return;
                 try {
                     Result result = settle(id);
-                    if (result != null) {
-                        queuePrizes(id);
-                        announce(discord, id, result);
-                    }
+                    if (result != null) announce(discord, id, result);
                 } catch (Exception error) {
                     report("finish giveaway", error);
                 }
             }
         } catch (Exception error) {
             report("check giveaways", error);
+        }
+        retryPrizeDeliveries();
+    }
+
+    private void retryPrizeDeliveries() {
+        try {
+            List<String> pending = new ArrayList<>();
+            try (var connection = database.connect(); var query = connection.prepareStatement("""
+                    SELECT DISTINCT q.giveaway_id FROM giveaway_delivery_queue q
+                    JOIN ultimate_discord_giveaways g ON g.id=q.giveaway_id
+                    WHERE g.guild_id=? ORDER BY q.giveaway_id LIMIT 25
+                    """)) {
+                query.setString(1, guildId);
+                try (var rows = query.executeQuery()) {
+                    while (rows.next()) pending.add(rows.getString(1));
+                }
+            }
+            for (String id : pending) {
+                if (Thread.currentThread().isInterrupted()) return;
+                queuePrizes(id);
+            }
+        } catch (SQLException error) {
+            report("queue giveaway prizes (will retry)", error);
         }
     }
 
@@ -333,7 +353,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
         var ids = java.util.regex.Pattern.compile("\"([0-9]{17,20})\"").matcher(result.winners());
         while (ids.find()) mentions.add("<@" + ids.group(1) + ">");
         String outcome = mentions.isEmpty() ? "No eligible entries." : "Winners: " + String.join(", ", mentions)
-                + (isKey(result.prize()) ? "\nKeys arrive when you join with inventory space." : "\nRank access starts at the draw.");
+                + (isKey(result.prize()) ? "\nKeys will be delivered once the shop connection is available and you have inventory space." : "\nRank access starts at the draw and syncs when the shop connection is available.");
         try {
             channel.editMessageById(result.message(), "**UltimateSMP giveaway ended**\n"
                     + describe(result.prize(), result.quantity()) + "\n" + outcome)
