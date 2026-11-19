@@ -331,8 +331,8 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
                         } while (rows.next());
                         shared.commit();
                     } catch (SQLException error) {
-                        shared.rollback();
-                        throw error;
+                        try { shared.rollback(); } catch (SQLException rollback) { error.addSuppressed(rollback); }
+                        throw DatabaseFailure.during("write giveaway prize or commit MariaDB transaction", error);
                     }
                 }
             }
@@ -390,7 +390,7 @@ final class PaperDiscordBot extends ListenerAdapter implements AutoCloseable {
     private void report(String operation, Throwable error) {
         String code = error instanceof SQLException sql ? ", SQL code " + sql.getErrorCode()
                 : error instanceof ErrorResponseException discord ? ", Discord code " + discord.getErrorCode() : "";
-        logger.warning("Discord bot could not " + operation + " (" + error.getClass().getSimpleName() + code + ").");
+        logger.warning("Discord bot could not " + operation + " (" + (error instanceof SQLException ? DatabaseFailure.describe(error) : error.getClass().getSimpleName() + code) + ").");
     }
 
     @Override public void close() {

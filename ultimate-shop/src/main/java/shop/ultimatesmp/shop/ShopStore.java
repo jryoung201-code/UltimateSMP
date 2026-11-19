@@ -9,7 +9,7 @@ import java.security.MessageDigest;
 public final class ShopStore {
     private final String url,user,password;
     public ShopStore(String url,String user,String password){this.url=url;this.user=user;this.password=password;}
-    Connection connect() throws SQLException {var p=new Properties();p.setProperty("user",user);p.setProperty("password",password);p.setProperty("connectTimeout","10000");p.setProperty("socketTimeout","15000");return new org.mariadb.jdbc.Driver().connect(url,p);}
+    Connection connect() throws SQLException {var p=new Properties();p.setProperty("user",user);p.setProperty("password",password);p.setProperty("connectTimeout","10000");p.setProperty("socketTimeout","15000");try {return new org.mariadb.jdbc.Driver().connect(url,p);} catch (SQLException error) {throw DatabaseFailure.during("open MariaDB connection",error);}}
     public void initialize() throws Exception {
         try(var c=connect();var s=c.createStatement();var in=ShopStore.class.getResourceAsStream("/schema.sql")){
             for(String sql:new String(Objects.requireNonNull(in).readAllBytes(),StandardCharsets.UTF_8).split(";"))if(!sql.isBlank())s.execute(sql);
@@ -46,11 +46,19 @@ public final class ShopStore {
 
     public void link(UUID id,String name,String token,long expires)throws Exception {
         try(var c=connect()){
-            update(c,"DELETE FROM ultimate_shop_links WHERE expires < ?",System.currentTimeMillis());
-            update(c,"DELETE FROM ultimate_shop_links WHERE player_id=?",id.toString());
-            update(c,"INSERT INTO ultimate_shop_links(token_hash,player_id,player_name,expires) VALUES(?,?,?,?)",hash(token),id.toString(),name,expires);
+            linkWrite(c,"remove expired website links","DELETE FROM ultimate_shop_links WHERE expires < ?",System.currentTimeMillis());
+            linkWrite(c,"remove previous website link","DELETE FROM ultimate_shop_links WHERE player_id=?",id.toString());
+            linkWrite(c,"insert website link","INSERT INTO ultimate_shop_links(token_hash,player_id,player_name,expires) VALUES(?,?,?,?)",hash(token),id.toString(),name,expires);
         }
     }
+    private static void linkWrite(Connection connection, String operation, String sql, Object... parameters) throws SQLException {
+        try {
+            update(connection, sql, parameters);
+        } catch (SQLException error) {
+            throw DatabaseFailure.during(operation, error);
+        }
+    }
+
     public Map<String,Long> read(UUID id,String name)throws Exception {
         try(var c=connect()){
             if(name!=null)update(c,"INSERT INTO ultimate_shop_players(player_id,player_name,updated_at) VALUES(?,?,?) ON DUPLICATE KEY UPDATE player_name=VALUES(player_name),updated_at=VALUES(updated_at)",id.toString(),name,System.currentTimeMillis());
